@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/customer_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/customer_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/customer_summary_header.dart';
 
 class CustomerDetailScreen extends StatelessWidget {
   const CustomerDetailScreen({super.key, required this.customer});
@@ -100,7 +102,8 @@ class CustomerDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
     if (businessId == null || businessId.isEmpty) {
       return const Scaffold(
@@ -121,214 +124,251 @@ class CustomerDetailScreen extends StatelessWidget {
       builder: (context, snapshot) {
         final currentCustomer = snapshot.data;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Customer detail'),
-            actions: [
-              if (currentCustomer != null)
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () => Navigator.of(context).pushNamed(
-                    AppRoutes.customerEdit,
-                    arguments: currentCustomer,
-                  ),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (currentCustomer != null)
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: () => _deleteCustomer(context, currentCustomer),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-            ],
-          ),
-          body: SafeArea(
-            child: currentCustomer == null
-                ? const AppEmptyState(
-                    title: 'Customer not found',
-                    message: 'This customer may have been deleted.',
-                    icon: Icons.person_off_outlined,
-                  )
-                : ListView(
-                    padding: AppSpacing.responsiveScreenPadding(context),
-                    children: [
-                      _CustomerHeader(customer: currentCustomer),
-                      const SizedBox(height: AppSpacing.lg),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppPrimaryButton(
-                              label: 'Call',
-                              icon: Icons.call_rounded,
-                              onPressed: () =>
-                                  _launchPhone(context, currentCustomer.phone),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: AppPrimaryButton(
-                              label: 'WhatsApp',
-                              icon: Icons.chat_outlined,
-                              onPressed: () =>
-                                  _launchWhatsApp(context, currentCustomer),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      _DetailCard(
-                        title: 'Contact',
-                        rows: [
-                          _DetailRow('Phone', currentCustomer.phone),
-                          if (currentCustomer.alternatePhone != null)
+        return AppResponsiveShell(
+          title: 'Customer detail',
+          currentRoute: AppRoutes.customerDetail,
+          currentRole: auth.role,
+          actions: [
+            if (currentCustomer != null)
+              IconButton(
+                tooltip: 'Edit',
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamed(AppRoutes.customerEdit, arguments: currentCustomer),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            if (currentCustomer != null)
+              IconButton(
+                tooltip: 'Delete',
+                onPressed: () => _deleteCustomer(context, currentCustomer),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+          ],
+          child: currentCustomer == null
+              ? const AppEmptyState(
+                  title: 'Customer not found',
+                  message: 'This customer may have been deleted.',
+                  icon: Icons.person_off_outlined,
+                )
+              : ListView(
+                  padding: AppSpacing.responsiveScreenPadding(context),
+                  children: [
+                    CustomerSummaryHeader(
+                      customer: currentCustomer,
+                      onCall: () =>
+                          _launchPhone(context, currentCustomer.phone),
+                      onWhatsApp: () =>
+                          _launchWhatsApp(context, currentCustomer),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final desktop = constraints.maxWidth >= 900;
+                        final contact = _DetailCard(
+                          title: 'Contact',
+                          icon: Icons.contact_phone_outlined,
+                          rows: [
                             _DetailRow(
-                              'Alternate',
-                              currentCustomer.alternatePhone!,
+                              'Phone',
+                              AppFormatters.phoneForDisplay(
+                                currentCustomer.phone,
+                              ),
                             ),
-                          if (currentCustomer.email != null)
-                            _DetailRow('Email', currentCustomer.email!),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _DetailCard(
-                        title: 'Address',
-                        rows: [
-                          _DetailRow('Address', currentCustomer.addressLine1),
-                          _DetailRow(
-                            'Village / City',
-                            currentCustomer.villageCity,
-                          ),
-                          _DetailRow('Taluka', currentCustomer.taluka),
-                          _DetailRow('District', currentCustomer.district),
-                          _DetailRow('State', currentCustomer.state),
-                          _DetailRow('Pin code', currentCustomer.pinCode),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _DetailCard(
-                        title: 'Tax and balances',
-                        rows: [
-                          if (currentCustomer.gstin != null)
-                            _DetailRow('GSTIN', currentCustomer.gstin!),
-                          _DetailRow(
-                            'Opening balance',
-                            AppFormatters.currency(
-                              currentCustomer.openingBalance,
+                            if (currentCustomer.alternatePhone != null)
+                              _DetailRow(
+                                'Alternate',
+                                AppFormatters.phoneForDisplay(
+                                  currentCustomer.alternatePhone!,
+                                ),
+                              ),
+                            if (currentCustomer.email != null)
+                              _DetailRow('Email', currentCustomer.email!),
+                          ],
+                        );
+                        final tax = _DetailCard(
+                          title: 'Tax and balances',
+                          icon: Icons.account_balance_wallet_outlined,
+                          rows: [
+                            if (currentCustomer.gstin != null)
+                              _DetailRow('GSTIN', currentCustomer.gstin!),
+                            _DetailRow(
+                              'Opening balance',
+                              AppFormatters.currency(
+                                currentCustomer.openingBalance,
+                              ),
                             ),
-                          ),
-                          _DetailRow(
-                            'Outstanding',
-                            AppFormatters.currency(currentCustomer.outstanding),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-          ),
+                            _DetailRow(
+                              'Outstanding',
+                              AppFormatters.currency(
+                                currentCustomer.outstanding,
+                              ),
+                            ),
+                          ],
+                        );
+
+                        if (!desktop) {
+                          return Column(
+                            children: [
+                              contact,
+                              const SizedBox(height: AppSpacing.md),
+                              tax,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: contact),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: tax),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _DetailCard(
+                      title: 'Address',
+                      icon: Icons.location_on_outlined,
+                      rows: [
+                        _DetailRow('Address', currentCustomer.addressLine1),
+                        _DetailRow(
+                          'Village / City',
+                          currentCustomer.villageCity,
+                        ),
+                        _DetailRow('Taluka', currentCustomer.taluka),
+                        _DetailRow('District', currentCustomer.district),
+                        _DetailRow('State', currentCustomer.state),
+                        _DetailRow('Pin code', currentCustomer.pinCode),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    const _PlaceholderPanel(
+                      title: 'Recent invoices',
+                      subtitle:
+                          'Invoices linked to this customer will appear here.',
+                      icon: Icons.receipt_long_outlined,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const _PlaceholderPanel(
+                      title: 'Ledger preview',
+                      subtitle:
+                          'Ledger entries and payment history can be connected next.',
+                      icon: Icons.timeline_outlined,
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                ),
         );
       },
     );
   }
 }
 
-class _CustomerHeader extends StatelessWidget {
-  const _CustomerHeader({required this.customer});
+class _DetailCard extends StatelessWidget {
+  const _DetailCard({
+    required this.title,
+    required this.icon,
+    required this.rows,
+  });
 
-  final CustomerModel customer;
+  final String title;
+  final IconData icon;
+  final List<_DetailRow> rows;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: AppColors.primary,
-              child: Text(
-                customer.name.isEmpty ? '?' : customer.name[0].toUpperCase(),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(color: AppColors.primary),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: AppRadius.mdRadius,
+                ),
+                child: Icon(icon, color: AppColors.primary),
               ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: AppSectionHeader(title: title)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...rows.map(
+            (row) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    customer.name,
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  SizedBox(
+                    width: 118,
+                    child: Text(
+                      row.label,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    customer.fullAddress,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppStatusChip(
-                    label: customer.hasOutstanding
-                        ? 'Outstanding ${AppFormatters.currency(customer.outstanding)}'
-                        : 'No outstanding',
-                    type: customer.hasOutstanding
-                        ? AppStatusType.warning
-                        : AppStatusType.success,
+                  Expanded(
+                    child: Text(
+                      row.value,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.title, required this.rows});
+class _PlaceholderPanel extends StatelessWidget {
+  const _PlaceholderPanel({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
 
   final String title;
-  final List<_DetailRow> rows;
+  final String subtitle;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AppSectionTitle(title: title),
-            const SizedBox(height: AppSpacing.md),
-            ...rows.map(
-              (row) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 118,
-                      child: Text(
-                        row.label,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        row.value,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSoft,
+              borderRadius: AppRadius.mdRadius,
             ),
-          ],
-        ),
+            child: Icon(icon, color: AppColors.textMuted),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: AppSectionHeader(title: title, subtitle: subtitle),
+          ),
+        ],
       ),
     );
   }

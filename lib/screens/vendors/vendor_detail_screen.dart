@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/vendor_model.dart';
@@ -94,7 +95,8 @@ class VendorDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
     if (businessId == null || businessId.isEmpty) {
       return const Scaffold(
@@ -115,215 +117,375 @@ class VendorDetailScreen extends StatelessWidget {
       builder: (context, snapshot) {
         final currentVendor = snapshot.data;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Vendor detail'),
-            actions: [
-              if (currentVendor != null)
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).pushNamed(AppRoutes.vendorEdit, arguments: currentVendor),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (currentVendor != null)
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: () => _deleteVendor(context, currentVendor),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-            ],
-          ),
-          body: SafeArea(
-            child: currentVendor == null
-                ? const AppEmptyState(
-                    title: 'Vendor not found',
-                    message: 'This vendor may have been deleted.',
-                    icon: Icons.local_shipping_outlined,
-                  )
-                : ListView(
-                    padding: AppSpacing.responsiveScreenPadding(context),
-                    children: [
-                      _VendorHeader(vendor: currentVendor),
-                      const SizedBox(height: AppSpacing.lg),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppPrimaryButton(
-                              label: 'Call',
-                              icon: Icons.call_rounded,
-                              onPressed: () =>
-                                  _launchPhone(context, currentVendor.phone),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: AppPrimaryButton(
-                              label: 'WhatsApp',
-                              icon: Icons.chat_outlined,
-                              onPressed: () =>
-                                  _launchWhatsApp(context, currentVendor),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      _DetailCard(
-                        title: 'Contact',
-                        rows: [
-                          _DetailRow('Phone', currentVendor.phone),
-                          if (currentVendor.alternatePhone != null)
+        return AppResponsiveShell(
+          title: 'Vendor detail',
+          currentRoute: AppRoutes.vendorDetail,
+          currentRole: auth.role,
+          actions: [
+            if (currentVendor != null)
+              IconButton(
+                tooltip: 'Edit',
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamed(AppRoutes.vendorEdit, arguments: currentVendor),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            if (currentVendor != null)
+              IconButton(
+                tooltip: 'Delete',
+                onPressed: () => _deleteVendor(context, currentVendor),
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+          ],
+          child: currentVendor == null
+              ? const AppEmptyState(
+                  title: 'Vendor not found',
+                  message: 'This vendor may have been deleted.',
+                  icon: Icons.local_shipping_outlined,
+                )
+              : ListView(
+                  padding: AppSpacing.responsiveScreenPadding(context),
+                  children: [
+                    _VendorSummaryHeader(
+                      vendor: currentVendor,
+                      onCall: () => _launchPhone(context, currentVendor.phone),
+                      onWhatsApp: () => _launchWhatsApp(context, currentVendor),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final desktop = constraints.maxWidth >= 900;
+                        final contact = _DetailCard(
+                          title: 'Contact',
+                          icon: Icons.contact_phone_outlined,
+                          rows: [
                             _DetailRow(
-                              'Alternate',
-                              currentVendor.alternatePhone!,
+                              'Phone',
+                              AppFormatters.phoneForDisplay(
+                                currentVendor.phone,
+                              ),
                             ),
-                          if (currentVendor.email != null)
-                            _DetailRow('Email', currentVendor.email!),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _DetailCard(
-                        title: 'Address',
-                        rows: [
-                          _DetailRow('Address', currentVendor.addressLine1),
-                          _DetailRow(
-                            'Village / City',
-                            currentVendor.villageCity,
-                          ),
-                          _DetailRow('Taluka', currentVendor.taluka),
-                          _DetailRow('District', currentVendor.district),
-                          _DetailRow('State', currentVendor.state),
-                          _DetailRow('Pin code', currentVendor.pinCode),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _DetailCard(
-                        title: 'Tax and payable',
-                        rows: [
-                          if (currentVendor.gstin != null)
-                            _DetailRow('GSTIN', currentVendor.gstin!),
-                          _DetailRow(
-                            'Opening payable',
-                            AppFormatters.currency(
-                              currentVendor.openingPayable,
+                            if (currentVendor.alternatePhone != null)
+                              _DetailRow(
+                                'Alternate',
+                                AppFormatters.phoneForDisplay(
+                                  currentVendor.alternatePhone!,
+                                ),
+                              ),
+                            if (currentVendor.email != null)
+                              _DetailRow('Email', currentVendor.email!),
+                          ],
+                        );
+                        final payable = _DetailCard(
+                          title: 'Tax and payable',
+                          icon: Icons.account_balance_wallet_outlined,
+                          rows: [
+                            if (currentVendor.gstin != null)
+                              _DetailRow('GSTIN', currentVendor.gstin!),
+                            _DetailRow(
+                              'Opening payable',
+                              AppFormatters.currency(
+                                currentVendor.openingPayable,
+                              ),
                             ),
-                          ),
-                          _DetailRow(
-                            'Outstanding payable',
-                            AppFormatters.currency(
-                              currentVendor.outstandingPayable,
+                            _DetailRow(
+                              'Outstanding payable',
+                              AppFormatters.currency(
+                                currentVendor.outstandingPayable,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-          ),
+                          ],
+                        );
+
+                        if (!desktop) {
+                          return Column(
+                            children: [
+                              contact,
+                              const SizedBox(height: AppSpacing.md),
+                              payable,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: contact),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(child: payable),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _DetailCard(
+                      title: 'Address',
+                      icon: Icons.location_on_outlined,
+                      rows: [
+                        _DetailRow('Address', currentVendor.addressLine1),
+                        _DetailRow('Village / City', currentVendor.villageCity),
+                        _DetailRow('Taluka', currentVendor.taluka),
+                        _DetailRow('District', currentVendor.district),
+                        _DetailRow('State', currentVendor.state),
+                        _DetailRow('Pin code', currentVendor.pinCode),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    const _PlaceholderPanel(
+                      title: 'Purchase history',
+                      subtitle:
+                          'Purchase invoices linked to this vendor will appear here.',
+                      icon: Icons.shopping_bag_outlined,
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                ),
         );
       },
     );
   }
 }
 
-class _VendorHeader extends StatelessWidget {
-  const _VendorHeader({required this.vendor});
+class _VendorSummaryHeader extends StatelessWidget {
+  const _VendorSummaryHeader({
+    required this.vendor,
+    required this.onCall,
+    required this.onWhatsApp,
+  });
 
   final VendorModel vendor;
+  final VoidCallback onCall;
+  final VoidCallback onWhatsApp;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: AppColors.primary,
-              child: Text(
-                vendor.name.isEmpty ? '?' : vendor.name[0].toUpperCase(),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(color: AppColors.primary),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    vendor.name,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    vendor.fullAddress,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppStatusChip(
-                    label: vendor.hasPayable
-                        ? 'Payable ${AppFormatters.currency(vendor.outstandingPayable)}'
-                        : 'No payable',
-                    type: vendor.hasPayable
-                        ? AppStatusType.warning
-                        : AppStatusType.success,
-                  ),
-                ],
-              ),
-            ),
-          ],
+    final initial = vendor.name.trim().isEmpty
+        ? '?'
+        : vendor.name.trim()[0].toUpperCase();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F766E), Color(0xFF2563EB)],
         ),
+        borderRadius: AppRadius.xxlRadius,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 34,
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primary,
+                child: Text(
+                  initial,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      vendor.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      vendor.fullAddress,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: AppRadius.xlRadius,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Outstanding payable',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  AppFormatters.currency(vendor.outstandingPayable),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                AppStatusChip(
+                  label: vendor.hasPayable ? 'Payable due' : 'No payable',
+                  type: vendor.hasPayable
+                      ? AppStatusType.warning
+                      : AppStatusType.success,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onCall,
+                  icon: const Icon(Icons.call_rounded),
+                  label: const Text('Call'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onWhatsApp,
+                  icon: const Icon(Icons.chat_outlined),
+                  label: const Text('WhatsApp'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
 class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.title, required this.rows});
+  const _DetailCard({
+    required this.title,
+    required this.icon,
+    required this.rows,
+  });
 
   final String title;
+  final IconData icon;
   final List<_DetailRow> rows;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AppSectionTitle(title: title),
-            const SizedBox(height: AppSpacing.md),
-            ...rows.map(
-              (row) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 132,
-                      child: Text(
-                        row.label,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        row.value,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ),
-                  ],
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: AppRadius.mdRadius,
                 ),
+                child: Icon(icon, color: AppColors.primary),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: AppSectionHeader(title: title)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...rows.map(
+            (row) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 132,
+                    child: Text(
+                      row.label,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      row.value,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlaceholderPanel extends StatelessWidget {
+  const _PlaceholderPanel({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSoft,
+              borderRadius: AppRadius.mdRadius,
+            ),
+            child: Icon(icon, color: AppColors.textMuted),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: AppSectionHeader(title: title, subtitle: subtitle),
+          ),
+        ],
       ),
     );
   }

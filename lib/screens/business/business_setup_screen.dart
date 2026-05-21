@@ -3,15 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_shadows.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../core/utils/validators.dart';
 import '../../models/business_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/business_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/business_logo_picker.dart';
+import 'widgets/business_setup_stepper.dart';
+import 'widgets/business_type_selector.dart';
 
 class BusinessSetupScreen extends StatefulWidget {
   const BusinessSetupScreen({super.key});
@@ -31,22 +36,27 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
     'Other',
   ];
 
-  final _formKey = GlobalKey<FormState>();
+  static const List<String> _stepLabels = ['Basics', 'GST', 'Address', 'Logo'];
+
+  final _stepKeys = List.generate(4, (_) => GlobalKey<FormState>());
   final _businessService = BusinessService();
   final _imagePicker = ImagePicker();
 
   final _nameController = TextEditingController();
-  final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _alternatePhoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _gstinController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  final _pinCodeController = TextEditingController();
 
   String _businessType = _businessTypes.first;
   Uint8List? _logoBytes;
   String? _logoName;
   String? _logoContentType;
   bool _isSaving = false;
+  bool _setupComplete = false;
   int _currentStep = 0;
 
   @override
@@ -60,11 +70,13 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _addressController.dispose();
     _phoneController.dispose();
-    _alternatePhoneController.dispose();
     _emailController.dispose();
     _gstinController.dispose();
+    _addressController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _pinCodeController.dispose();
     super.dispose();
   }
 
@@ -86,12 +98,24 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
     });
   }
 
-  Future<void> _saveBusiness() async {
-    if (!_formKey.currentState!.validate()) {
-      setState(() => _currentStep = 0);
+  void _continue() {
+    final form = _stepKeys[_currentStep].currentState;
+    if (form != null && !form.validate()) return;
+
+    if (_currentStep == _stepLabels.length - 1) {
+      _saveBusiness();
       return;
     }
 
+    setState(() => _currentStep++);
+  }
+
+  void _back() {
+    if (_currentStep == 0) return;
+    setState(() => _currentStep--);
+  }
+
+  Future<void> _saveBusiness() async {
     final auth = context.read<AuthProvider>();
     final session = auth.session;
     if (session == null) {
@@ -111,9 +135,8 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
         businessId: businessId,
         ownerUid: session.uid,
         name: _nameController.text.trim(),
-        address: _addressController.text.trim(),
+        address: _fullAddress,
         phone: _normalizeIndianPhone(_phoneController.text),
-        alternatePhone: _optionalPhone(_alternatePhoneController.text),
         email: _emailController.text.trim(),
         businessType: _businessType,
         gstin: _gstinController.text.trim().toUpperCase(),
@@ -128,6 +151,14 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       await auth.refreshSession();
 
       if (!mounted) return;
+      setState(() => _setupComplete = true);
+      SnackBarHelper.show(
+        context,
+        message: 'Business profile created successfully.',
+        type: AppSnackBarType.success,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
       Navigator.of(
         context,
       ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (_) => false);
@@ -141,6 +172,14 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  String get _fullAddress {
+    final address = _addressController.text.trim();
+    final city = _cityController.text.trim();
+    final state = _stateController.text.trim();
+    final pinCode = _pinCodeController.text.trim();
+    return '$address, $city, $state - $pinCode';
   }
 
   String _displayIndianPhone(String? value) {
@@ -158,16 +197,10 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
     return '+91$digits';
   }
 
-  String? _optionalPhone(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return _normalizeIndianPhone(trimmed);
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final canSave = !_isSaving && !auth.isLoading;
+    final canNavigate = !_isSaving && !auth.isLoading && !_setupComplete;
 
     return Scaffold(
       appBar: AppBar(
@@ -175,7 +208,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
         actions: [
           IconButton(
             tooltip: 'Logout',
-            onPressed: canSave
+            onPressed: canNavigate
                 ? () async {
                     await context.read<AuthProvider>().signOut();
                     if (!context.mounted) return;
@@ -189,170 +222,197 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
         ],
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
+        child: Center(
+          child: SingleChildScrollView(
             padding: AppSpacing.responsiveScreenPadding(context),
-            children: [
-              const AppSectionTitle(
-                title: 'Create your business profile',
-                subtitle:
-                    'This profile becomes the business workspace for invoices, inventory, customers, and payments.',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: _setupComplete
+                    ? const _SetupSuccessCard()
+                    : Column(
+                        key: const ValueKey('setup-form'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const AppSectionHeader(
+                            title: 'Create your business profile',
+                            subtitle:
+                                'Set up the workspace used for invoices, inventory, customers, vendors, and reports.',
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          BusinessSetupStepper(
+                            currentStep: _currentStep,
+                            steps: _stepLabels,
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          _WizardCard(
+                            stepNumber: _currentStep + 1,
+                            title: _titleForStep(_currentStep),
+                            subtitle: _subtitleForStep(_currentStep),
+                            child: Form(
+                              key: _stepKeys[_currentStep],
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: _stepContent(_currentStep),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              _StepProgress(currentStep: _currentStep),
-              const SizedBox(height: AppSpacing.lg),
-              _SetupStepCard(
-                step: 0,
-                currentStep: _currentStep,
-                title: 'Brand',
-                subtitle: 'Add the logo and business identity customers see.',
-                child: _BrandStep(
-                  logoBytes: _logoBytes,
-                  logoName: _logoName,
-                  nameController: _nameController,
-                  onPickLogo: _pickLogo,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _SetupStepCard(
-                step: 1,
-                currentStep: _currentStep,
-                title: 'Contact',
-                subtitle: 'Keep invoices and WhatsApp actions accurate.',
-                child: _ContactStep(
-                  addressController: _addressController,
-                  phoneController: _phoneController,
-                  alternatePhoneController: _alternatePhoneController,
-                  emailController: _emailController,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _SetupStepCard(
-                step: 2,
-                currentStep: _currentStep,
-                title: 'Tax details',
-                subtitle: 'GSTIN and business type for compliant records.',
-                child: _TaxStep(
-                  gstinController: _gstinController,
-                  businessType: _businessType,
-                  businessTypes: _businessTypes,
-                  onBusinessTypeChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _businessType = value);
-                  },
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: AppSpacing.screenPadding,
-        child: AppPrimaryButton(
-          label: 'Save and open dashboard',
-          icon: Icons.check_circle_outline_rounded,
-          isLoading: _isSaving || auth.isLoading,
-          onPressed: canSave ? _saveBusiness : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _StepProgress extends StatelessWidget {
-  const _StepProgress({required this.currentStep});
-
-  final int currentStep;
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = ['Brand', 'Contact', 'GST'];
-
-    return Row(
-      children: [
-        for (var index = 0; index < labels.length; index++) ...[
-          Expanded(
-            child: Column(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: index <= currentStep
-                        ? AppColors.primary
-                        : AppColors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  labels[index],
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: index <= currentStep
-                        ? AppColors.primary
-                        : AppColors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
             ),
           ),
-          if (index != labels.length - 1) const SizedBox(width: AppSpacing.xs),
-        ],
-      ],
+        ),
+      ),
+      bottomNavigationBar: _setupComplete
+          ? null
+          : SafeArea(
+              minimum: AppSpacing.screenPadding,
+              child: Center(
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Row(
+                    children: [
+                      if (_currentStep > 0) ...[
+                        Expanded(
+                          child: AppSecondaryButton(
+                            label: 'Back',
+                            icon: Icons.arrow_back_rounded,
+                            onPressed: canNavigate ? _back : null,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                      ],
+                      Expanded(
+                        flex: 2,
+                        child: AppPrimaryButton(
+                          label: _currentStep == _stepLabels.length - 1
+                              ? 'Save and open dashboard'
+                              : 'Continue',
+                          icon: _currentStep == _stepLabels.length - 1
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.arrow_forward_rounded,
+                          isLoading: _isSaving || auth.isLoading,
+                          onPressed: canNavigate ? _continue : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
     );
+  }
+
+  String _titleForStep(int step) {
+    return switch (step) {
+      0 => 'Business basics',
+      1 => 'GST and type',
+      2 => 'Business address',
+      _ => 'Logo and confirmation',
+    };
+  }
+
+  String _subtitleForStep(int step) {
+    return switch (step) {
+      0 => 'Add the primary identity and contact details.',
+      1 => 'Choose your business category and GSTIN.',
+      2 => 'This address appears on invoices and records.',
+      _ => 'Upload a logo and review your setup.',
+    };
+  }
+
+  Widget _stepContent(int step) {
+    return switch (step) {
+      0 => _BasicsStep(
+        key: const ValueKey('basics'),
+        nameController: _nameController,
+        phoneController: _phoneController,
+        emailController: _emailController,
+      ),
+      1 => _TaxStep(
+        key: const ValueKey('tax'),
+        gstinController: _gstinController,
+        businessType: _businessType,
+        businessTypes: _businessTypes,
+        onBusinessTypeChanged: (value) => setState(() => _businessType = value),
+      ),
+      2 => _AddressStep(
+        key: const ValueKey('address'),
+        addressController: _addressController,
+        cityController: _cityController,
+        stateController: _stateController,
+        pinCodeController: _pinCodeController,
+      ),
+      _ => _ConfirmationStep(
+        key: const ValueKey('confirm'),
+        logoBytes: _logoBytes,
+        logoName: _logoName,
+        onPickLogo: _pickLogo,
+        businessName: _nameController.text.trim(),
+        phone: _normalizeIndianPhone(_phoneController.text),
+        email: _emailController.text.trim(),
+        businessType: _businessType,
+        gstin: _gstinController.text.trim().toUpperCase(),
+        address: _fullAddress,
+      ),
+    };
   }
 }
 
-class _SetupStepCard extends StatelessWidget {
-  const _SetupStepCard({
-    required this.step,
-    required this.currentStep,
+class _WizardCard extends StatelessWidget {
+  const _WizardCard({
+    required this.stepNumber,
     required this.title,
     required this.subtitle,
     required this.child,
   });
 
-  final int step;
-  final int currentStep;
+  final int stepNumber;
   final String title;
   final String subtitle;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final isActive = step == currentStep;
-
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.xxlRadius,
+        boxShadow: AppShadows.soft,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppRadius.xxlRadius,
+          border: Border.all(color: AppColors.border),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 17,
-                  backgroundColor: isActive
-                      ? AppColors.primary
-                      : AppColors.primaryLight,
+                  radius: 20,
+                  backgroundColor: AppColors.primary,
                   child: Text(
-                    '${step + 1}',
-                    style: TextStyle(
-                      color: isActive ? Colors.white : AppColors.primary,
-                      fontWeight: FontWeight.w800,
+                    '$stepNumber',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: AppSectionTitle(title: title, subtitle: subtitle),
+                  child: AppSectionHeader(title: title, subtitle: subtitle),
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.xl),
             child,
           ],
         ),
@@ -361,76 +421,22 @@ class _SetupStepCard extends StatelessWidget {
   }
 }
 
-class _BrandStep extends StatelessWidget {
-  const _BrandStep({
-    required this.logoBytes,
-    required this.logoName,
+class _BasicsStep extends StatelessWidget {
+  const _BasicsStep({
+    super.key,
     required this.nameController,
-    required this.onPickLogo,
+    required this.phoneController,
+    required this.emailController,
   });
 
-  final Uint8List? logoBytes;
-  final String? logoName;
   final TextEditingController nameController;
-  final VoidCallback onPickLogo;
+  final TextEditingController phoneController;
+  final TextEditingController emailController;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        InkWell(
-          onTap: onPickLogo,
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceSoft,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    color: AppColors.primaryLight,
-                    child: logoBytes == null
-                        ? const Icon(
-                            Icons.add_photo_alternate_outlined,
-                            color: AppColors.primary,
-                            size: 30,
-                          )
-                        : Image.memory(logoBytes!, fit: BoxFit.cover),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        logoName ?? 'Upload business logo',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'PNG or JPG works best.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.upload_rounded, color: AppColors.textMuted),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
         AppTextField(
           label: 'Business name',
           controller: nameController,
@@ -439,38 +445,6 @@ class _BrandStep extends StatelessWidget {
           textCapitalization: TextCapitalization.words,
           validator: (value) =>
               Validators.requiredText(value, fieldName: 'Business name'),
-        ),
-      ],
-    );
-  }
-}
-
-class _ContactStep extends StatelessWidget {
-  const _ContactStep({
-    required this.addressController,
-    required this.phoneController,
-    required this.alternatePhoneController,
-    required this.emailController,
-  });
-
-  final TextEditingController addressController;
-  final TextEditingController phoneController;
-  final TextEditingController alternatePhoneController;
-  final TextEditingController emailController;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        AppTextField(
-          label: 'Address',
-          controller: addressController,
-          hintText: 'Shop no, street, city, state',
-          prefixIcon: Icons.location_on_outlined,
-          textCapitalization: TextCapitalization.sentences,
-          maxLines: 3,
-          validator: (value) =>
-              Validators.requiredText(value, fieldName: 'Address'),
         ),
         const SizedBox(height: AppSpacing.md),
         AppTextField(
@@ -482,17 +456,6 @@ class _ContactStep extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           maxLength: 10,
           validator: Validators.indianPhone,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AppTextField(
-          label: 'Alternate phone',
-          controller: alternatePhoneController,
-          hintText: 'Optional',
-          prefixIcon: Icons.call_outlined,
-          keyboardType: TextInputType.phone,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          maxLength: 10,
-          validator: (value) => Validators.indianPhone(value, optional: true),
         ),
         const SizedBox(height: AppSpacing.md),
         AppTextField(
@@ -510,6 +473,7 @@ class _ContactStep extends StatelessWidget {
 
 class _TaxStep extends StatelessWidget {
   const _TaxStep({
+    super.key,
     required this.gstinController,
     required this.businessType,
     required this.businessTypes,
@@ -519,27 +483,21 @@ class _TaxStep extends StatelessWidget {
   final TextEditingController gstinController;
   final String businessType;
   final List<String> businessTypes;
-  final ValueChanged<String?> onBusinessTypeChanged;
+  final ValueChanged<String> onBusinessTypeChanged;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: businessType,
-          items: businessTypes
-              .map(
-                (type) =>
-                    DropdownMenuItem<String>(value: type, child: Text(type)),
-              )
-              .toList(),
+        Text('Business type', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: AppSpacing.sm),
+        BusinessTypeSelector(
+          value: businessType,
+          types: businessTypes,
           onChanged: onBusinessTypeChanged,
-          decoration: const InputDecoration(
-            labelText: 'Business type',
-            prefixIcon: Icon(Icons.category_outlined),
-          ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
         AppTextField(
           label: 'GSTIN',
           controller: gstinController,
@@ -559,6 +517,217 @@ class _TaxStep extends StatelessWidget {
           validator: Validators.gstin,
         ),
       ],
+    );
+  }
+}
+
+class _AddressStep extends StatelessWidget {
+  const _AddressStep({
+    super.key,
+    required this.addressController,
+    required this.cityController,
+    required this.stateController,
+    required this.pinCodeController,
+  });
+
+  final TextEditingController addressController;
+  final TextEditingController cityController;
+  final TextEditingController stateController;
+  final TextEditingController pinCodeController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AppTextField(
+          label: 'Address',
+          controller: addressController,
+          hintText: 'Shop no, building, street',
+          prefixIcon: Icons.location_on_outlined,
+          textCapitalization: TextCapitalization.sentences,
+          maxLines: 3,
+          validator: (value) =>
+              Validators.requiredText(value, fieldName: 'Address'),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppTextField(
+          label: 'City',
+          controller: cityController,
+          hintText: 'Surat',
+          prefixIcon: Icons.location_city_outlined,
+          textCapitalization: TextCapitalization.words,
+          validator: (value) =>
+              Validators.requiredText(value, fieldName: 'City'),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppTextField(
+          label: 'State',
+          controller: stateController,
+          hintText: 'Gujarat',
+          prefixIcon: Icons.map_outlined,
+          textCapitalization: TextCapitalization.words,
+          validator: (value) =>
+              Validators.requiredText(value, fieldName: 'State'),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppTextField(
+          label: 'Pin code',
+          controller: pinCodeController,
+          hintText: '395006',
+          prefixIcon: Icons.pin_drop_outlined,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          maxLength: 6,
+          validator: Validators.pinCode,
+        ),
+      ],
+    );
+  }
+}
+
+class _ConfirmationStep extends StatelessWidget {
+  const _ConfirmationStep({
+    super.key,
+    required this.logoBytes,
+    required this.logoName,
+    required this.onPickLogo,
+    required this.businessName,
+    required this.phone,
+    required this.email,
+    required this.businessType,
+    required this.gstin,
+    required this.address,
+  });
+
+  final Uint8List? logoBytes;
+  final String? logoName;
+  final VoidCallback onPickLogo;
+  final String businessName;
+  final String phone;
+  final String email;
+  final String businessType;
+  final String gstin;
+  final String address;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        BusinessLogoPicker(
+          logoBytes: logoBytes,
+          logoName: logoName,
+          onPickLogo: onPickLogo,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSoft,
+            borderRadius: AppRadius.xlRadius,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              _ReviewRow(label: 'Business', value: businessName),
+              _ReviewRow(label: 'Phone', value: phone),
+              _ReviewRow(label: 'Email', value: email),
+              _ReviewRow(label: 'Type', value: businessType),
+              _ReviewRow(label: 'GSTIN', value: gstin),
+              _ReviewRow(label: 'Address', value: address, isLast: true),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewRow extends StatelessWidget {
+  const _ReviewRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
+
+  final String label;
+  final String value;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '-' : value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SetupSuccessCard extends StatelessWidget {
+  const _SetupSuccessCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('setup-success'),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.xxlRadius,
+        boxShadow: AppShadows.soft,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppRadius.xxlRadius,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 74,
+              height: 74,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                color: AppColors.primary,
+                size: 38,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Business setup complete',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Opening your dashboard now.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

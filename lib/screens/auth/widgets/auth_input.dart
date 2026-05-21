@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../core/constants/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_spacing.dart';
 
 class AuthInput extends StatelessWidget {
   const AuthInput({
@@ -44,7 +46,10 @@ class AuthInput extends StatelessWidget {
       validator: validator,
       obscureText: obscureText,
       onChanged: onChanged,
-      style: Theme.of(context).textTheme.bodyLarge,
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w700,
+      ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
@@ -53,22 +58,22 @@ class AuthInput extends StatelessWidget {
         filled: true,
         fillColor: AppColors.surfaceSoft,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
+          horizontal: AppSpacing.lg,
           vertical: 18,
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
+        border: _border(AppColors.border),
+        enabledBorder: _border(AppColors.border),
+        focusedBorder: _border(AppColors.primary, width: 1.5),
+        errorBorder: _border(AppColors.danger),
+        focusedErrorBorder: _border(AppColors.danger, width: 1.5),
       ),
+    );
+  }
+
+  OutlineInputBorder _border(Color color, {double width = 1}) {
+    return OutlineInputBorder(
+      borderRadius: AppRadius.lgRadius,
+      borderSide: BorderSide(color: color, width: width),
     );
   }
 }

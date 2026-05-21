@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../providers/auth_provider.dart';
+import 'widgets/auth_brand_panel.dart';
 import 'widgets/auth_button.dart';
 import 'widgets/auth_card.dart';
 import 'widgets/auth_input.dart';
+import 'widgets/auth_tab_selector.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -107,80 +109,54 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final size = MediaQuery.sizeOf(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFF1FBF7), Color(0xFFEAF2FF), Color(0xFFFFFFFF)],
+            colors: [Color(0xFFEFFDF8), Color(0xFFF8FAFC), Color(0xFFEAF2FF)],
           ),
         ),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 900;
-              final horizontalPadding = isDesktop
-                  ? AppSpacing.xxxl
-                  : size.width < 380
-                  ? AppSpacing.md
-                  : AppSpacing.xl;
-
-              return Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: horizontalPadding,
-                    vertical: isDesktop ? AppSpacing.xxl : AppSpacing.xl,
-                  ),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 260),
-                    curve: Curves.easeOutCubic,
-                    constraints: const BoxConstraints(maxWidth: 1180),
-                    child: isDesktop
-                        ? Row(
-                            children: [
-                              const Expanded(child: _BrandPanel()),
-                              const SizedBox(width: 56),
-                              SizedBox(
-                                width: 450,
-                                child: _LoginPanel(
-                                  formKey: _formKey,
-                                  usePhone: _usePhone,
-                                  isLoading: auth.isLoading,
-                                  phoneController: _phoneController,
-                                  emailController: _emailController,
-                                  passwordController: _passwordController,
-                                  obscurePassword: _obscurePassword,
-                                  onModeChanged: _setMode,
-                                  onSubmit: _submit,
-                                  onTogglePassword: () => setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  }),
-                                ),
-                              ),
-                            ],
-                          )
-                        : _MobileLayout(
-                            child: _LoginPanel(
-                              formKey: _formKey,
-                              usePhone: _usePhone,
-                              isLoading: auth.isLoading,
-                              phoneController: _phoneController,
-                              emailController: _emailController,
-                              passwordController: _passwordController,
-                              obscurePassword: _obscurePassword,
-                              onModeChanged: _setMode,
-                              onSubmit: _submit,
-                              onTogglePassword: () => setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              }),
-                            ),
-                          ),
-                  ),
-                ),
-              );
+              final isDesktop = constraints.maxWidth >= 920;
+              return isDesktop
+                  ? _DesktopLoginLayout(
+                      child: _LoginCardContent(
+                        formKey: _formKey,
+                        usePhone: _usePhone,
+                        isLoading: auth.isLoading,
+                        phoneController: _phoneController,
+                        emailController: _emailController,
+                        passwordController: _passwordController,
+                        obscurePassword: _obscurePassword,
+                        onModeChanged: _setMode,
+                        onSubmit: _submit,
+                        onTogglePassword: () => setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        }),
+                      ),
+                    )
+                  : _MobileLoginLayout(
+                      child: _LoginCardContent(
+                        formKey: _formKey,
+                        usePhone: _usePhone,
+                        isLoading: auth.isLoading,
+                        phoneController: _phoneController,
+                        emailController: _emailController,
+                        passwordController: _passwordController,
+                        obscurePassword: _obscurePassword,
+                        onModeChanged: _setMode,
+                        onSubmit: _submit,
+                        onTogglePassword: () => setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        }),
+                      ),
+                    );
             },
           ),
         ),
@@ -189,26 +165,68 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _MobileLayout extends StatelessWidget {
-  const _MobileLayout({required this.child});
+class _DesktopLoginLayout extends StatelessWidget {
+  const _DesktopLoginLayout({required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _CompactBrandHeader(),
-        const SizedBox(height: AppSpacing.xl),
-        child,
-      ],
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xxxl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1180, minHeight: 660),
+          child: Row(
+            children: [
+              const Expanded(child: AuthBrandPanel()),
+              const SizedBox(width: 56),
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: child,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _LoginPanel extends StatelessWidget {
-  const _LoginPanel({
+class _MobileLoginLayout extends StatelessWidget {
+  const _MobileLoginLayout({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+
+    return Center(
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(
+          width < 380 ? AppSpacing.md : AppSpacing.xl,
+          AppSpacing.xl,
+          width < 380 ? AppSpacing.md : AppSpacing.xl,
+          AppSpacing.xl + viewInsets.bottom,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginCardContent extends StatelessWidget {
+  const _LoginCardContent({
     required this.formKey,
     required this.usePhone,
     required this.isLoading,
@@ -238,10 +256,14 @@ class _LoginPanel extends StatelessWidget {
       child: Form(
         key: formKey,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            const Center(child: _AuthLogo()),
+            const SizedBox(height: AppSpacing.xl),
             Text(
               'Welcome back',
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
@@ -249,14 +271,14 @@ class _LoginPanel extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Sign in to continue managing billing, stock, and business operations.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                height: 1.45,
-                color: AppColors.textSecondary,
-              ),
+              'Continue to your VyapaarX workspace.',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppSpacing.xl),
-            _AuthTabs(
+            AuthTabSelector(
               usePhone: usePhone,
               enabled: !isLoading,
               onChanged: onModeChanged,
@@ -267,15 +289,13 @@ class _LoginPanel extends StatelessWidget {
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: const Offset(0.04, 0),
+                  end: Offset.zero,
+                ).animate(animation);
                 return FadeTransition(
                   opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.03, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  ),
+                  child: SlideTransition(position: slide, child: child),
                 );
               },
               child: usePhone
@@ -289,125 +309,25 @@ class _LoginPanel extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xl),
             AuthButton(
-              label: usePhone ? 'Send secure OTP' : 'Login securely',
-              icon: usePhone ? Icons.sms_outlined : Icons.lock_open_rounded,
+              label: 'Continue',
+              icon: usePhone
+                  ? Icons.arrow_forward_rounded
+                  : Icons.lock_open_rounded,
               isLoading: isLoading,
               onPressed: onSubmit,
             ),
             const SizedBox(height: AppSpacing.lg),
-            const _TrustRow(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthTabs extends StatelessWidget {
-  const _AuthTabs({
-    required this.usePhone,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final bool usePhone;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 54,
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Stack(
-        children: [
-          AnimatedAlign(
-            duration: const Duration(milliseconds: 230),
-            curve: Curves.easeOutCubic,
-            alignment: usePhone ? Alignment.centerLeft : Alignment.centerRight,
-            child: FractionallySizedBox(
-              widthFactor: 0.5,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryDark.withValues(alpha: 0.08),
-                      blurRadius: 14,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
+            const _FirebaseBadge(),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'By continuing, you agree to secure Firebase authentication and VyapaarX business access policies.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textMuted,
+                height: 1.45,
               ),
             ),
-          ),
-          Row(
-            children: [
-              _AuthTabButton(
-                label: 'Phone',
-                icon: Icons.phone_android_rounded,
-                selected: usePhone,
-                enabled: enabled,
-                onTap: () => onChanged(true),
-              ),
-              _AuthTabButton(
-                label: 'Email',
-                icon: Icons.mail_outline_rounded,
-                selected: !usePhone,
-                enabled: enabled,
-                onTap: () => onChanged(false),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AuthTabButton extends StatelessWidget {
-  const _AuthTabButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.textSecondary;
-    return Expanded(
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(14),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 19),
-              const SizedBox(width: AppSpacing.xs),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -444,7 +364,7 @@ class _PhoneLoginFields extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         Text(
           'OTP will be sent with India country code +91.',
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
@@ -512,373 +432,82 @@ class _EmailLoginFields extends StatelessWidget {
   }
 }
 
-class _TrustRow extends StatelessWidget {
-  const _TrustRow();
+class _AuthLogo extends StatelessWidget {
+  const _AuthLogo();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
         Container(
-          width: 32,
-          height: 32,
+          width: 62,
+          height: 62,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
-            borderRadius: BorderRadius.circular(10),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.secondary],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.25),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
           child: const Icon(
-            Icons.verified_user_outlined,
-            color: AppColors.primary,
-            size: 18,
+            Icons.storefront_rounded,
+            color: Colors.white,
+            size: 34,
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            'Protected by Firebase Auth and business-scoped access.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontSize: 13, height: 1.35),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CompactBrandHeader extends StatelessWidget {
-  const _CompactBrandHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const _BrandMark(size: 64),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.sm),
         Text(
           'VyapaarX',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Smart ERP for growing Indian businesses',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w900,
+          ),
         ),
       ],
     );
   }
 }
 
-class _BrandPanel extends StatelessWidget {
-  const _BrandPanel();
+class _FirebaseBadge extends StatelessWidget {
+  const _FirebaseBadge();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 660),
-      padding: const EdgeInsets.all(42),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(36),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF075E54), Color(0xFF0E7C66), Color(0xFF2563EB)],
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.24),
-            blurRadius: 34,
-            offset: const Offset(0, 24),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -48,
-            top: -38,
-            child: _DecorativeCircle(
-              size: 180,
-              color: Colors.white.withValues(alpha: 0.12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.verified_user_outlined,
+              color: AppColors.primary,
+              size: 16,
             ),
-          ),
-          Positioned(
-            left: -36,
-            bottom: -52,
-            child: _DecorativeCircle(
-              size: 220,
-              color: Colors.white.withValues(alpha: 0.09),
+            const SizedBox(width: 7),
+            Text(
+              'Secured by Firebase Auth',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w900,
+              ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _BrandMark(size: 70, light: true),
-              const SizedBox(height: 42),
-              Text(
-                'Run billing, stock, GST, and teams from one calm workspace.',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: Colors.white,
-                  fontSize: 38,
-                  height: 1.08,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'VyapaarX brings invoices, inventory, customers, vendors, reports, and ERP controls into a premium mobile-first dashboard.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.82),
-                  height: 1.55,
-                ),
-              ),
-              const SizedBox(height: 36),
-              const _FeatureList(),
-              const Spacer(),
-              const _IllustrationPanel(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BrandMark extends StatelessWidget {
-  const _BrandMark({required this.size, this.light = false});
-
-  final double size;
-  final bool light;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: light ? Colors.white : AppColors.primary,
-            borderRadius: BorderRadius.circular(size * 0.28),
-          ),
-          child: Icon(
-            Icons.storefront_rounded,
-            color: light ? AppColors.primary : Colors.white,
-            size: size * 0.52,
-          ),
+          ],
         ),
-        if (light) ...[
-          const SizedBox(width: AppSpacing.md),
-          Text(
-            'VyapaarX',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _FeatureList extends StatelessWidget {
-  const _FeatureList();
-
-  @override
-  Widget build(BuildContext context) {
-    final features = [
-      'GST-ready invoices and WhatsApp sharing',
-      'Real-time stock, purchase, and vendor payable',
-      'Role-based access for sales, accounts, and warehouse',
-    ];
-
-    return Column(
-      children: [
-        for (final feature in features) ...[
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  feature,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-        ],
-      ],
-    );
-  }
-}
-
-class _IllustrationPanel extends StatelessWidget {
-  const _IllustrationPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: _MetricPill(
-                  label: 'Today sales',
-                  value: 'Rs 48.2k',
-                  icon: Icons.trending_up_rounded,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Container(
-                  height: 118,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: const Icon(
-                    Icons.inventory_2_outlined,
-                    color: AppColors.primary,
-                    size: 44,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            height: 84,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.receipt_long_outlined,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 160,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceMuted,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Container(
-                        width: 94,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricPill extends StatelessWidget {
-  const _MetricPill({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 118,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.success),
-          const SizedBox(height: AppSpacing.sm),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 2),
-          Text(value, style: Theme.of(context).textTheme.titleLarge),
-        ],
-      ),
-    );
-  }
-}
-
-class _DecorativeCircle extends StatelessWidget {
-  const _DecorativeCircle({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 }

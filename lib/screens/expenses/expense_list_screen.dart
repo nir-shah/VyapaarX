@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
-import '../../core/utils/app_formatters.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/expense_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/expense_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/expense_card.dart';
+import 'widgets/expense_summary_card.dart';
 
 class ExpenseListScreen extends StatefulWidget {
   const ExpenseListScreen({super.key});
@@ -19,6 +19,19 @@ class ExpenseListScreen extends StatefulWidget {
 }
 
 class _ExpenseListScreenState extends State<ExpenseListScreen> {
+  static const List<String> _defaultCategories = [
+    'General',
+    'Rent',
+    'Salary',
+    'Transport',
+    'Electricity',
+    'Internet',
+    'Purchase',
+    'Maintenance',
+    'Marketing',
+    'Other',
+  ];
+
   final _expenseService = ExpenseService();
   final _searchController = TextEditingController();
   String _query = '';
@@ -32,6 +45,10 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   void _openAddExpense() {
     Navigator.of(context).pushNamed(AppRoutes.expenseAdd);
+  }
+
+  void _openEditExpense(ExpenseModel expense) {
+    Navigator.of(context).pushNamed(AppRoutes.expenseEdit, arguments: expense);
   }
 
   Future<void> _deleteExpense(ExpenseModel expense) async {
@@ -78,291 +95,152 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Expenses')),
-      body: SafeArea(
-        child: businessId == null || businessId.isEmpty
-            ? const AppEmptyState(
-                title: 'Business profile needed',
-                message: 'Create a business profile before adding expenses.',
-                icon: Icons.storefront_outlined,
-              )
-            : StreamBuilder<List<ExpenseModel>>(
-                stream: _expenseService.watchExpenses(businessId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const AppLoadingIndicator(
-                      message: 'Loading expenses...',
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return AppEmptyState(
-                      title: 'Unable to load expenses',
-                      message: 'Please check your connection and try again.',
-                      icon: Icons.error_outline_rounded,
-                      actionLabel: 'Retry',
-                      onActionPressed: () => setState(() {}),
-                    );
-                  }
-
-                  final allExpenses = snapshot.data ?? [];
-                  final currentMonth = DateTime.now();
-                  final monthlyExpenses = allExpenses
-                      .where((expense) => expense.isInMonth(currentMonth))
-                      .toList();
-                  final categories = [
-                    'All',
-                    ...{
-                      for (final expense in allExpenses)
-                        if (expense.category.trim().isNotEmpty)
-                          expense.category.trim(),
-                    },
-                  ];
-                  if (!categories.contains(_categoryFilter)) {
-                    _categoryFilter = 'All';
-                  }
-
-                  final filteredExpenses = allExpenses.where((expense) {
-                    final matchesCategory =
-                        _categoryFilter == 'All' ||
-                        expense.category == _categoryFilter;
-                    return matchesCategory && expense.matchesSearch(_query);
-                  }).toList();
-
-                  return RefreshIndicator(
-                    onRefresh: () async => setState(() {}),
-                    child: ListView(
-                      padding: AppSpacing.responsiveScreenPadding(context),
-                      children: [
-                        _ExpenseSummary(
-                          allExpenses: allExpenses,
-                          monthlyExpenses: monthlyExpenses,
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        AppTextField(
-                          label: 'Search expense',
-                          controller: _searchController,
-                          hintText: 'Title, category, payment mode',
-                          prefixIcon: Icons.search_rounded,
-                          suffixIcon: _query.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Clear search',
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _query = '');
-                                  },
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                          onChanged: (value) => setState(() => _query = value),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        _CategoryFilter(
-                          categories: categories,
-                          selectedCategory: _categoryFilter,
-                          onChanged: (value) {
-                            setState(() => _categoryFilter = value);
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        if (allExpenses.isEmpty)
-                          AppEmptyState(
-                            title: 'No expenses yet',
-                            message:
-                                'Add business expenses to track monthly spending.',
-                            icon: Icons.payments_outlined,
-                            actionLabel: 'Add expense',
-                            onActionPressed: _openAddExpense,
-                          )
-                        else if (filteredExpenses.isEmpty)
-                          const AppEmptyState(
-                            title: 'No matching expenses',
-                            message: 'Try another search or category.',
-                            icon: Icons.search_off_rounded,
-                          )
-                        else
-                          ...filteredExpenses.map(
-                            (expense) => Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: AppSpacing.sm,
-                              ),
-                              child: _ExpenseCard(
-                                expense: expense,
-                                onDelete: () => _deleteExpense(expense),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: AppSpacing.xxxl),
-                      ],
-                    ),
-                  );
-                },
-              ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddExpense,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-      ),
-    );
-  }
-}
-
-class _ExpenseSummary extends StatelessWidget {
-  const _ExpenseSummary({
-    required this.allExpenses,
-    required this.monthlyExpenses,
-  });
-
-  final List<ExpenseModel> allExpenses;
-  final List<ExpenseModel> monthlyExpenses;
-
-  @override
-  Widget build(BuildContext context) {
-    final monthlyTotal = monthlyExpenses.fold<double>(
-      0,
-      (total, expense) => total + expense.amount,
-    );
-    final total = allExpenses.fold<double>(
-      0,
-      (sum, expense) => sum + expense.amount,
-    );
-    final topCategory = _topCategory(monthlyExpenses);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const AppSectionTitle(
-          title: 'Expense reports',
-          subtitle: 'Review monthly spending and category trends.',
-        ),
-        const SizedBox(height: AppSpacing.md),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 720 ? 3 : 1;
-            final cards = [
-              _SummaryCardData(
-                title: 'This month',
-                value: AppFormatters.currency(monthlyTotal),
-                icon: Icons.calendar_month_outlined,
-                color: AppColors.info,
-              ),
-              _SummaryCardData(
-                title: 'All expenses',
-                value: AppFormatters.currency(total),
-                icon: Icons.account_balance_wallet_outlined,
-                color: AppColors.warning,
-              ),
-              _SummaryCardData(
-                title: 'Top category',
-                value: topCategory,
-                icon: Icons.category_outlined,
-                color: AppColors.primary,
-              ),
-            ];
-
-            return GridView.builder(
-              itemCount: cards.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                crossAxisSpacing: AppSpacing.sm,
-                mainAxisSpacing: AppSpacing.sm,
-                childAspectRatio: columns == 1 ? 3.8 : 2.6,
-              ),
-              itemBuilder: (context, index) => _SummaryCard(data: cards[index]),
-            );
-          },
+    return AppResponsiveShell(
+      title: 'Expenses',
+      currentRoute: AppRoutes.expenses,
+      currentRole: auth.role,
+      actions: [
+        IconButton(
+          tooltip: 'Add expense',
+          onPressed: _openAddExpense,
+          icon: const Icon(Icons.add_card_outlined),
         ),
       ],
+      child: businessId == null || businessId.isEmpty
+          ? const AppEmptyState(
+              title: 'Business profile needed',
+              message: 'Create a business profile before adding expenses.',
+              icon: Icons.storefront_outlined,
+            )
+          : StreamBuilder<List<ExpenseModel>>(
+              stream: _expenseService.watchExpenses(businessId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const _ExpenseListSkeleton();
+                }
+
+                if (snapshot.hasError) {
+                  return AppEmptyState(
+                    title: 'Unable to load expenses',
+                    message: 'Please check your connection and try again.',
+                    icon: Icons.error_outline_rounded,
+                    actionLabel: 'Retry',
+                    onActionPressed: () => setState(() {}),
+                  );
+                }
+
+                final allExpenses = snapshot.data ?? [];
+                final currentMonth = DateTime.now();
+                final monthlyExpenses = allExpenses
+                    .where((expense) => expense.isInMonth(currentMonth))
+                    .toList();
+                final categories = _categoryOptions(allExpenses);
+                if (!categories.contains(_categoryFilter)) {
+                  _categoryFilter = 'All';
+                }
+
+                final filteredExpenses = _applyFilters(allExpenses);
+
+                return RefreshIndicator(
+                  onRefresh: () async => setState(() {}),
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+                    children: [
+                      AppSectionHeader(
+                        title: 'Expense reports',
+                        subtitle:
+                            'Track monthly spending, payment modes, and cost categories.',
+                        trailing: FilledButton.icon(
+                          onPressed: _openAddExpense,
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Add'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      ExpenseSummaryCard(
+                        allExpenses: allExpenses,
+                        monthlyExpenses: monthlyExpenses,
+                        month: currentMonth,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppSearchBar(
+                        controller: _searchController,
+                        hintText: 'Search title, category, payment mode',
+                        onChanged: (value) => setState(() => _query = value),
+                        onClear: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _CategoryFilterBar(
+                        categories: categories,
+                        selectedCategory: _categoryFilter,
+                        onChanged: (category) {
+                          setState(() => _categoryFilter = category);
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      if (allExpenses.isEmpty)
+                        AppEmptyState(
+                          title: 'No expenses yet',
+                          message:
+                              'Add business expenses to see monthly totals and category trends.',
+                          icon: Icons.payments_outlined,
+                          actionLabel: 'Add expense',
+                          onActionPressed: _openAddExpense,
+                        )
+                      else if (filteredExpenses.isEmpty)
+                        const AppEmptyState(
+                          title: 'No matching expenses',
+                          message: 'Try another search or category filter.',
+                          icon: Icons.search_off_rounded,
+                        )
+                      else
+                        ...filteredExpenses.map(
+                          (expense) => Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.sm,
+                            ),
+                            child: ExpenseCard(
+                              expense: expense,
+                              onTap: () => _openEditExpense(expense),
+                              onEdit: () => _openEditExpense(expense),
+                              onDelete: () => _deleteExpense(expense),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  String _topCategory(List<ExpenseModel> expenses) {
-    if (expenses.isEmpty) return 'None';
+  List<String> _categoryOptions(List<ExpenseModel> expenses) {
+    final values = <String>{
+      ..._defaultCategories,
+      for (final expense in expenses)
+        if (expense.category.trim().isNotEmpty) expense.category.trim(),
+    }.toList()..sort();
+    return ['All', ...values];
+  }
 
-    final totals = <String, double>{};
-    for (final expense in expenses) {
-      totals[expense.category] =
-          (totals[expense.category] ?? 0) + expense.amount;
-    }
-
-    final sorted = totals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.first.key;
+  List<ExpenseModel> _applyFilters(List<ExpenseModel> expenses) {
+    return expenses.where((expense) {
+      final matchesCategory =
+          _categoryFilter == 'All' || expense.category == _categoryFilter;
+      return matchesCategory && expense.matchesSearch(_query);
+    }).toList();
   }
 }
 
-class _SummaryCardData {
-  const _SummaryCardData({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.data});
-
-  final _SummaryCardData data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: data.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(data.icon, color: data.color),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    data.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    data.value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryFilter extends StatelessWidget {
-  const _CategoryFilter({
+class _CategoryFilterBar extends StatelessWidget {
+  const _CategoryFilterBar({
     required this.categories,
     required this.selectedCategory,
     required this.onChanged,
@@ -375,7 +253,7 @@ class _CategoryFilter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: categories.length,
@@ -393,72 +271,28 @@ class _CategoryFilter extends StatelessWidget {
   }
 }
 
-class _ExpenseCard extends StatelessWidget {
-  const _ExpenseCard({required this.expense, required this.onDelete});
-
-  final ExpenseModel expense;
-  final VoidCallback onDelete;
+class _ExpenseListSkeleton extends StatelessWidget {
+  const _ExpenseListSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const CircleAvatar(
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: AppColors.primary,
-              child: Icon(Icons.payments_outlined),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    expense.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${expense.category} | ${expense.paymentMode} | ${_dateText(expense.date)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  AppStatusChip(
-                    label: AppFormatters.currency(expense.amount),
-                    type: AppStatusType.warning,
-                  ),
-                ],
-              ),
-            ),
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') {
-                  Navigator.of(
-                    context,
-                  ).pushNamed(AppRoutes.expenseEdit, arguments: expense);
-                }
-                if (value == 'delete') onDelete();
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      children: const [
+        LoadingSkeleton(height: 28, width: 220),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 168),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 56),
+        SizedBox(height: AppSpacing.md),
+        LoadingSkeleton(height: 42),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 96),
+        SizedBox(height: AppSpacing.sm),
+        LoadingSkeleton(height: 96),
+        SizedBox(height: AppSpacing.sm),
+        LoadingSkeleton(height: 96),
+      ],
     );
   }
-}
-
-String _dateText(DateTime date) {
-  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 }

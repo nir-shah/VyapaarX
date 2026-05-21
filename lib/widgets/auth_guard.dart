@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/routes/app_routes.dart';
 import '../providers/auth_provider.dart';
+import 'app_empty_state.dart';
 import 'loading/app_loading_indicator.dart';
 
 class AuthGuard extends StatelessWidget {
@@ -26,16 +27,12 @@ class AuthGuard extends StatelessWidget {
     }
 
     if (auth.status == AuthStatus.disabled) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Account disabled')),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
+      return const Scaffold(
+        body: AppEmptyState(
+          title: 'Account disabled',
+          message:
               'Your account has been disabled. Please contact the business owner or admin.',
-              textAlign: TextAlign.center,
-            ),
-          ),
+          icon: Icons.block_rounded,
         ),
       );
     }

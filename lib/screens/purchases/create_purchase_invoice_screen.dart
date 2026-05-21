@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/product_model.dart';
@@ -15,6 +17,7 @@ import '../../services/product_service.dart';
 import '../../services/purchase_invoice_service.dart';
 import '../../services/vendor_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/purchase_summary_card.dart';
 
 class CreatePurchaseInvoiceScreen extends StatefulWidget {
   const CreatePurchaseInvoiceScreen({super.key});
@@ -167,114 +170,194 @@ class _CreatePurchaseInvoiceScreenState
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create purchase')),
-      body: SafeArea(
-        child: businessId == null || businessId.isEmpty
-            ? const AppEmptyState(
-                title: 'Business profile needed',
-                message: 'Create a business profile before purchases.',
-                icon: Icons.storefront_outlined,
-              )
-            : StreamBuilder<List<VendorModel>>(
-                stream: VendorService().watchVendors(businessId),
-                builder: (context, vendorSnapshot) {
-                  return StreamBuilder<List<ProductModel>>(
-                    stream: ProductService().watchProducts(businessId),
-                    builder: (context, productSnapshot) {
-                      if (vendorSnapshot.connectionState ==
-                              ConnectionState.waiting ||
-                          productSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                        return const AppLoadingIndicator(
-                          message: 'Preparing purchase...',
-                        );
-                      }
+    return AppResponsiveShell(
+      title: 'Create Purchase',
+      currentRoute: AppRoutes.purchaseCreate,
+      currentRole: auth.role,
+      child: businessId == null || businessId.isEmpty
+          ? const AppEmptyState(
+              title: 'Business profile needed',
+              message: 'Create a business profile before purchases.',
+              icon: Icons.storefront_outlined,
+            )
+          : StreamBuilder<List<VendorModel>>(
+              stream: VendorService().watchVendors(businessId),
+              builder: (context, vendorSnapshot) {
+                return StreamBuilder<List<ProductModel>>(
+                  stream: ProductService().watchProducts(businessId),
+                  builder: (context, productSnapshot) {
+                    if ((vendorSnapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            !vendorSnapshot.hasData) ||
+                        (productSnapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            !productSnapshot.hasData)) {
+                      return const _CreatePurchaseSkeleton();
+                    }
 
-                      final vendors = vendorSnapshot.data ?? [];
-                      final products = productSnapshot.data ?? [];
+                    final vendors = vendorSnapshot.data ?? [];
+                    final products = productSnapshot.data ?? [];
 
-                      return ListView(
-                        padding: AppSpacing.responsiveScreenPadding(context),
-                        children: [
-                          const AppSectionTitle(
-                            title: 'Purchase invoice',
-                            subtitle:
-                                'Select a vendor, add products, and update stock.',
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          _VendorSelector(
-                            vendors: vendors,
-                            selectedVendor: _selectedVendor,
-                            onChanged: (vendor) {
-                              setState(() => _selectedVendor = vendor);
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          _ProductAdder(
-                            products: products,
-                            selectedProduct: _productToAdd,
-                            onChanged: (product) {
-                              setState(() => _productToAdd = product);
-                            },
-                            onAdd: _addProduct,
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          if (_items.isEmpty)
-                            const AppEmptyState(
-                              title: 'No products added',
-                              message:
-                                  'Add products to calculate purchase totals.',
-                              icon: Icons.add_shopping_cart_rounded,
-                            )
-                          else
-                            ..._items.asMap().entries.map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: AppSpacing.sm,
-                                ),
-                                child: _PurchaseItemCard(
-                                  item: entry.value,
-                                  onChanged: (item) =>
-                                      _updateItem(entry.key, item),
-                                  onRemove: () => _removeItem(entry.key),
-                                ),
+                    return Stack(
+                      children: [
+                        ListView(
+                          padding: const EdgeInsets.only(bottom: 128),
+                          children: [
+                            _PurchaseHero(
+                              vendor: _selectedVendor,
+                              totalAmount: _totalAmount,
+                              paymentStatus: _paymentStatus,
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            _VendorSelector(
+                              vendors: vendors,
+                              selectedVendor: _selectedVendor,
+                              onChanged: (vendor) {
+                                setState(() => _selectedVendor = vendor);
+                              },
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            _ProductAdder(
+                              products: products,
+                              selectedProduct: _productToAdd,
+                              onChanged: (product) {
+                                setState(() => _productToAdd = product);
+                              },
+                              onAdd: _addProduct,
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            AppSectionHeader(
+                              title: 'Product items',
+                              subtitle:
+                                  'Each item increases product stock after save.',
+                              trailing: AppStatusChip(
+                                label: '${_items.length} items',
+                                type: AppStatusType.info,
                               ),
                             ),
-                          const SizedBox(height: AppSpacing.md),
-                          _PaymentSection(
-                            paidController: _paidController,
-                            notesController: _notesController,
-                            onChanged: () => setState(() {}),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          _PurchaseSummary(
-                            subtotal: _subtotal,
-                            discountTotal: _discountTotal,
-                            gstTotal: _gstTotal,
+                            const SizedBox(height: AppSpacing.md),
+                            if (_items.isEmpty)
+                              const AppEmptyState(
+                                title: 'No products added',
+                                message:
+                                    'Add products to calculate purchase totals and stock impact.',
+                                icon: Icons.add_shopping_cart_rounded,
+                              )
+                            else
+                              ..._items.asMap().entries.map(
+                                (entry) => Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.sm,
+                                  ),
+                                  child: _PurchaseItemCard(
+                                    item: entry.value,
+                                    onChanged: (item) =>
+                                        _updateItem(entry.key, item),
+                                    onRemove: () => _removeItem(entry.key),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: AppSpacing.lg),
+                            _PaymentSection(
+                              paidController: _paidController,
+                              notesController: _notesController,
+                              onChanged: () => setState(() {}),
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            PurchaseSummaryCard(
+                              subtotal: _subtotal,
+                              discountTotal: _discountTotal,
+                              gstTotal: _gstTotal,
+                              totalAmount: _totalAmount,
+                              paidAmount: _paidAmount,
+                              balanceAmount: _balanceAmount,
+                              paymentStatus: _paymentStatus,
+                            ),
+                          ],
+                        ),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _StickyPurchaseBar(
                             totalAmount: _totalAmount,
-                            paidAmount: _paidAmount,
                             balanceAmount: _balanceAmount,
-                            paymentStatus: _paymentStatus,
+                            isSaving: _isSaving,
+                            onSave: _isSaving ? null : _savePurchase,
                           ),
-                          const SizedBox(height: AppSpacing.xxl),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _PurchaseHero extends StatelessWidget {
+  const _PurchaseHero({
+    required this.vendor,
+    required this.totalAmount,
+    required this.paymentStatus,
+  });
+
+  final VendorModel? vendor;
+  final double totalAmount;
+  final PaymentStatus paymentStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: AppRadius.xlRadius,
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: AppSpacing.screenPadding,
-        child: AppPrimaryButton(
-          label: 'Save purchase',
-          icon: Icons.check_circle_outline_rounded,
-          isLoading: _isSaving,
-          onPressed: _isSaving ? null : _savePurchase,
-        ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: AppRadius.lgRadius,
+            ),
+            child: const Icon(Icons.add_business_outlined, color: Colors.white),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'New purchase',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  vendor == null
+                      ? 'Select vendor and products to add stock.'
+                      : '${vendor!.name} - ${AppFormatters.currency(totalAmount)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.78),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          AppStatusChip(
+            label: paymentStatus.label,
+            type: purchaseStatusType(paymentStatus),
+          ),
+        ],
       ),
     );
   }
@@ -293,36 +376,59 @@ class _VendorSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Vendor'),
+    return ModernCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            title: 'Vendor',
+            subtitle: 'Vendor payable will update by the unpaid balance.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          DropdownButtonFormField<String>(
+            initialValue: selectedVendor?.id,
+            items: vendors
+                .map(
+                  (vendor) => DropdownMenuItem<String>(
+                    value: vendor.id,
+                    child: Text(vendor.name),
+                  ),
+                )
+                .toList(),
+            onChanged: (vendorId) {
+              onChanged(
+                vendors.where((vendor) => vendor.id == vendorId).firstOrNull,
+              );
+            },
+            decoration: const InputDecoration(
+              labelText: 'Select vendor',
+              prefixIcon: Icon(Icons.local_shipping_outlined),
+            ),
+          ),
+          if (selectedVendor != null) ...[
             const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              initialValue: selectedVendor?.id,
-              items: vendors
-                  .map(
-                    (vendor) => DropdownMenuItem<String>(
-                      value: vendor.id,
-                      child: Text(vendor.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (vendorId) {
-                onChanged(
-                  vendors.where((vendor) => vendor.id == vendorId).firstOrNull,
-                );
-              },
-              decoration: const InputDecoration(
-                labelText: 'Select vendor',
-                prefixIcon: Icon(Icons.local_shipping_outlined),
-              ),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                AppStatusChip(
+                  label:
+                      'Current payable ${AppFormatters.currency(selectedVendor!.outstandingPayable)}',
+                  type: selectedVendor!.outstandingPayable > 0
+                      ? AppStatusType.warning
+                      : AppStatusType.success,
+                ),
+                if (selectedVendor!.phone.trim().isNotEmpty)
+                  AppStatusChip(
+                    label: selectedVendor!.phone,
+                    type: AppStatusType.neutral,
+                    icon: Icons.call_outlined,
+                  ),
+              ],
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -343,46 +449,47 @@ class _ProductAdder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Products'),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              initialValue: selectedProduct?.id,
-              items: products
-                  .map(
-                    (product) => DropdownMenuItem<String>(
-                      value: product.id,
-                      child: Text(
-                        '${product.name} | Stock ${product.stockQuantity}',
-                      ),
+    return ModernCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            title: 'Add products',
+            subtitle: 'Purchase quantity increases stock after save.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          DropdownButtonFormField<String>(
+            initialValue: selectedProduct?.id,
+            items: products
+                .map(
+                  (product) => DropdownMenuItem<String>(
+                    value: product.id,
+                    child: Text(
+                      '${product.name} - Stock ${product.stockQuantity} ${product.unit}',
                     ),
-                  )
-                  .toList(),
-              onChanged: (productId) {
-                onChanged(
-                  products
-                      .where((product) => product.id == productId)
-                      .firstOrNull,
-                );
-              },
-              decoration: const InputDecoration(
-                labelText: 'Select product',
-                prefixIcon: Icon(Icons.inventory_2_outlined),
-              ),
+                  ),
+                )
+                .toList(),
+            onChanged: (productId) {
+              onChanged(
+                products
+                    .where((product) => product.id == productId)
+                    .firstOrNull,
+              );
+            },
+            decoration: const InputDecoration(
+              labelText: 'Select product',
+              prefixIcon: Icon(Icons.inventory_2_outlined),
             ),
-            const SizedBox(height: AppSpacing.md),
-            AppPrimaryButton(
-              label: 'Add product',
-              icon: Icons.add_rounded,
-              onPressed: selectedProduct == null ? null : onAdd,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppPrimaryButton(
+            label: 'Add product',
+            icon: Icons.add_rounded,
+            onPressed: selectedProduct == null ? null : onAdd,
+          ),
+        ],
       ),
     );
   }
@@ -401,89 +508,106 @@ class _PurchaseItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: AppSectionTitle(
-                    title: item.product.name,
-                    subtitle:
-                        'Current stock ${item.product.stockQuantity} ${item.product.unit} | GST ${item.gstRate}%',
-                  ),
+    final projectedStock = item.product.stockQuantity + item.quantity;
+
+    return ModernCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: AppRadius.mdRadius,
                 ),
-                IconButton(
-                  tooltip: 'Remove item',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline_rounded),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: AppColors.primary,
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.quantity.toString(),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(labelText: 'Qty'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(quantity: int.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: AppSectionHeader(
+                  title: item.product.name,
+                  subtitle:
+                      'HSN ${item.product.hsnCode} - GST ${item.gstRate}% - ${item.product.unit}',
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.rate.toStringAsFixed(0),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Rate'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(rate: double.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
+              ),
+              IconButton(
+                tooltip: 'Remove item',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: item.quantity.toString(),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Qty'),
+                  onChanged: (value) {
+                    onChanged(
+                      item.copyWith(quantity: int.tryParse(value) ?? 0),
+                    );
+                  },
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.discount.toStringAsFixed(0),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Discount'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(discount: double.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: TextFormField(
+                  initialValue: item.rate.toStringAsFixed(0),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Rate'),
+                  onChanged: (value) {
+                    onChanged(item.copyWith(rate: double.tryParse(value) ?? 0));
+                  },
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppStatusChip(
-                    label: 'GST ${AppFormatters.currency(item.gstAmount)}',
-                    type: AppStatusType.info,
-                  ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: TextFormField(
+                  initialValue: item.discount.toStringAsFixed(0),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Discount'),
+                  onChanged: (value) {
+                    onChanged(
+                      item.copyWith(discount: double.tryParse(value) ?? 0),
+                    );
+                  },
                 ),
-                Text(
-                  AppFormatters.currency(item.lineTotal),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              AppStatusChip(
+                label:
+                    'Stock ${item.product.stockQuantity} -> $projectedStock ${item.product.unit}',
+                type: AppStatusType.success,
+                icon: Icons.trending_up_rounded,
+              ),
+              AppStatusChip(
+                label: 'GST ${AppFormatters.currency(item.gstAmount)}',
+                type: AppStatusType.info,
+              ),
+              AppStatusChip(
+                label: 'Line ${AppFormatters.currency(item.lineTotal)}',
+                type: AppStatusType.warning,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -502,102 +626,126 @@ class _PaymentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Payment'),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              label: 'Paid amount',
-              controller: paidController,
-              prefixIcon: Icons.payments_outlined,
-              keyboardType: TextInputType.number,
-              onChanged: (_) => onChanged(),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              label: 'Notes',
-              controller: notesController,
-              prefixIcon: Icons.note_alt_outlined,
-              maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PurchaseSummary extends StatelessWidget {
-  const _PurchaseSummary({
-    required this.subtotal,
-    required this.discountTotal,
-    required this.gstTotal,
-    required this.totalAmount,
-    required this.paidAmount,
-    required this.balanceAmount,
-    required this.paymentStatus,
-  });
-
-  final double subtotal;
-  final double discountTotal;
-  final double gstTotal;
-  final double totalAmount;
-  final double paidAmount;
-  final double balanceAmount;
-  final PaymentStatus paymentStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const Expanded(child: AppSectionTitle(title: 'Summary')),
-                AppStatusChip(
-                  label: paymentStatus.label,
-                  type: _statusType(paymentStatus),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SummaryRow('Subtotal', AppFormatters.currency(subtotal)),
-            _SummaryRow('Discount', AppFormatters.currency(discountTotal)),
-            _SummaryRow('GST', AppFormatters.currency(gstTotal)),
-            const Divider(height: AppSpacing.xl),
-            _SummaryRow('Total', AppFormatters.currency(totalAmount)),
-            _SummaryRow('Paid', AppFormatters.currency(paidAmount)),
-            _SummaryRow('Payable', AppFormatters.currency(balanceAmount)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
+    return ModernCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label)),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
+          const AppSectionHeader(
+            title: 'Payment tracking',
+            subtitle: 'Unpaid balance becomes vendor payable.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            label: 'Paid amount',
+            controller: paidController,
+            prefixIcon: Icons.payments_outlined,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => onChanged(),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            label: 'Notes',
+            controller: notesController,
+            prefixIcon: Icons.note_alt_outlined,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _StickyPurchaseBar extends StatelessWidget {
+  const _StickyPurchaseBar({
+    required this.totalAmount,
+    required this.balanceAmount,
+    required this.isSaving,
+    required this.onSave,
+  });
+
+  final double totalAmount;
+  final double balanceAmount;
+  final bool isSaving;
+  final VoidCallback? onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.background.withValues(alpha: 0),
+            AppColors.background,
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.lg),
+        child: ModernCard(
+          showShadow: true,
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Total ${AppFormatters.currency(totalAmount)}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Payable ${AppFormatters.currency(balanceAmount)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 190,
+                child: AppPrimaryButton(
+                  label: 'Save purchase',
+                  icon: Icons.check_circle_outline_rounded,
+                  isLoading: isSaving,
+                  onPressed: onSave,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreatePurchaseSkeleton extends StatelessWidget {
+  const _CreatePurchaseSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      children: const [
+        LoadingSkeleton(height: 126),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 150),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 190),
+        SizedBox(height: AppSpacing.lg),
+        LoadingSkeleton(height: 220),
+      ],
     );
   }
 }
@@ -662,12 +810,4 @@ class _PurchaseItemDraft {
       unit: product.unit,
     );
   }
-}
-
-AppStatusType _statusType(PaymentStatus status) {
-  return switch (status) {
-    PaymentStatus.paid => AppStatusType.success,
-    PaymentStatus.partial => AppStatusType.warning,
-    PaymentStatus.unpaid => AppStatusType.danger,
-  };
 }

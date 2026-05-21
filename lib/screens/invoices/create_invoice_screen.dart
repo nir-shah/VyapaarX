@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_spacing.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/customer_model.dart';
@@ -14,6 +15,10 @@ import '../../services/customer_service.dart';
 import '../../services/invoice_service.dart';
 import '../../services/product_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/customer_selector_sheet.dart';
+import 'widgets/invoice_item_card.dart';
+import 'widgets/invoice_summary_card.dart';
+import 'widgets/product_selector_sheet.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
   const CreateInvoiceScreen({super.key});
@@ -28,8 +33,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   final _notesController = TextEditingController();
 
   CustomerModel? _selectedCustomer;
-  ProductModel? _productToAdd;
-  final List<_InvoiceItemDraft> _items = [];
+  final List<InvoiceItemDraft> _items = [];
   bool _isSaving = false;
 
   double get _subtotal =>
@@ -58,10 +62,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     super.dispose();
   }
 
-  void _addProduct() {
-    final product = _productToAdd;
-    if (product == null) return;
-
+  void _addProduct(ProductModel product) {
     final existingIndex = _items.indexWhere(
       (item) => item.product.id == product.id,
     );
@@ -73,13 +74,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           quantity: existing.quantity + 1,
         );
       } else {
-        _items.add(_InvoiceItemDraft.fromProduct(product));
+        _items.add(InvoiceItemDraft.fromProduct(product));
       }
-      _productToAdd = null;
     });
   }
 
-  void _updateItem(int index, _InvoiceItemDraft item) {
+  void _updateItem(int index, InvoiceItemDraft item) {
     setState(() => _items[index] = item);
   }
 
@@ -170,16 +170,19 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create invoice')),
       body: SafeArea(
         child: businessId == null || businessId.isEmpty
-            ? const AppEmptyState(
-                title: 'Business profile needed',
-                message: 'Create a business profile before billing.',
-                icon: Icons.storefront_outlined,
+            ? const Center(
+                child: AppEmptyState(
+                  title: 'Business profile needed',
+                  message: 'Create a business profile before billing.',
+                  icon: Icons.storefront_outlined,
+                ),
               )
             : StreamBuilder<List<CustomerModel>>(
                 stream: CustomerService().watchCustomers(businessId),
@@ -202,50 +205,38 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       return ListView(
                         padding: AppSpacing.responsiveScreenPadding(context),
                         children: [
-                          const AppSectionTitle(
+                          const AppSectionHeader(
                             title: 'Sales invoice',
                             subtitle:
-                                'Select a customer, add products, and collect payment.',
+                                'Select customer, add products, collect payment.',
                           ),
                           const SizedBox(height: AppSpacing.lg),
-                          _CustomerSelector(
-                            customers: customers,
-                            selectedCustomer: _selectedCustomer,
-                            onChanged: (customer) {
+                          _CustomerCardSection(
+                            customer: _selectedCustomer,
+                            onSelect: () async {
+                              final customer = await CustomerSelectorSheet.show(
+                                context,
+                                customers: customers,
+                              );
+                              if (customer == null || !mounted) return;
                               setState(() => _selectedCustomer = customer);
                             },
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          _ProductAdder(
+                          _ProductItemsSection(
+                            items: _items,
                             products: products,
-                            selectedProduct: _productToAdd,
-                            onChanged: (product) {
-                              setState(() => _productToAdd = product);
+                            onSelectProduct: () async {
+                              final product = await ProductSelectorSheet.show(
+                                context,
+                                products: products,
+                              );
+                              if (product == null || !mounted) return;
+                              _addProduct(product);
                             },
-                            onAdd: _addProduct,
+                            onChanged: _updateItem,
+                            onRemove: _removeItem,
                           ),
-                          const SizedBox(height: AppSpacing.md),
-                          if (_items.isEmpty)
-                            const AppEmptyState(
-                              title: 'No products added',
-                              message:
-                                  'Add products to calculate invoice totals.',
-                              icon: Icons.add_shopping_cart_rounded,
-                            )
-                          else
-                            ..._items.asMap().entries.map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: AppSpacing.sm,
-                                ),
-                                child: _InvoiceItemCard(
-                                  item: entry.value,
-                                  onChanged: (item) =>
-                                      _updateItem(entry.key, item),
-                                  onRemove: () => _removeItem(entry.key),
-                                ),
-                              ),
-                            ),
                           const SizedBox(height: AppSpacing.md),
                           _PaymentSection(
                             paidController: _paidController,
@@ -253,7 +244,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             onChanged: () => setState(() {}),
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          _InvoiceSummary(
+                          InvoiceSummaryCard(
                             subtotal: _subtotal,
                             discountTotal: _discountTotal,
                             gstTotal: _gstTotal,
@@ -262,7 +253,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             balanceAmount: _balanceAmount,
                             paymentStatus: _paymentStatus,
                           ),
-                          const SizedBox(height: AppSpacing.xxl),
+                          const SizedBox(height: AppSpacing.xxxl),
                         ],
                       );
                     },
@@ -272,223 +263,144 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       ),
       bottomNavigationBar: SafeArea(
         minimum: AppSpacing.screenPadding,
-        child: AppPrimaryButton(
-          label: 'Save invoice',
-          icon: Icons.check_circle_outline_rounded,
-          isLoading: _isSaving,
-          onPressed: _isSaving ? null : _saveInvoice,
-        ),
-      ),
-    );
-  }
-}
-
-class _CustomerSelector extends StatelessWidget {
-  const _CustomerSelector({
-    required this.customers,
-    required this.selectedCustomer,
-    required this.onChanged,
-  });
-
-  final List<CustomerModel> customers;
-  final CustomerModel? selectedCustomer;
-  final ValueChanged<CustomerModel?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Customer'),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              initialValue: selectedCustomer?.id,
-              items: customers
-                  .map(
-                    (customer) => DropdownMenuItem<String>(
-                      value: customer.id,
-                      child: Text(customer.name),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadius.xlRadius,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Invoice total',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  )
-                  .toList(),
-              onChanged: (customerId) {
-                onChanged(
-                  customers
-                      .where((customer) => customer.id == customerId)
-                      .firstOrNull,
-                );
-              },
-              decoration: const InputDecoration(
-                labelText: 'Select customer',
-                prefixIcon: Icon(Icons.person_outline_rounded),
+                    Text(
+                      AppFormatters.currency(_totalAmount),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              SizedBox(
+                width: 190,
+                child: AppPrimaryButton(
+                  label: 'Save Invoice',
+                  icon: Icons.check_circle_outline_rounded,
+                  isLoading: _isSaving,
+                  onPressed: _isSaving ? null : _saveInvoice,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ProductAdder extends StatelessWidget {
-  const _ProductAdder({
-    required this.products,
-    required this.selectedProduct,
-    required this.onChanged,
-    required this.onAdd,
-  });
+class _CustomerCardSection extends StatelessWidget {
+  const _CustomerCardSection({required this.customer, required this.onSelect});
 
-  final List<ProductModel> products;
-  final ProductModel? selectedProduct;
-  final ValueChanged<ProductModel?> onChanged;
-  final VoidCallback onAdd;
+  final CustomerModel? customer;
+  final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Products'),
-            const SizedBox(height: AppSpacing.md),
-            DropdownButtonFormField<String>(
-              initialValue: selectedProduct?.id,
-              items: products
-                  .map(
-                    (product) => DropdownMenuItem<String>(
-                      value: product.id,
-                      child: Text(
-                        '${product.name} | Stock ${product.stockQuantity}',
+    return _SectionCard(
+      title: '1. Customer',
+      subtitle: 'Select who you are billing.',
+      icon: Icons.person_outline_rounded,
+      child: customer == null
+          ? AppSecondaryButton(
+              label: 'Select customer',
+              icon: Icons.person_search_outlined,
+              onPressed: onSelect,
+            )
+          : Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.primaryLight,
+                  foregroundColor: AppColors.primary,
+                  child: Text(
+                    customer!.name.isEmpty
+                        ? '?'
+                        : customer!.name[0].toUpperCase(),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        customer!.name,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (productId) {
-                onChanged(
-                  products
-                      .where((product) => product.id == productId)
-                      .firstOrNull,
-                );
-              },
-              decoration: const InputDecoration(
-                labelText: 'Select product',
-                prefixIcon: Icon(Icons.inventory_2_outlined),
-              ),
+                      Text(AppFormatters.phoneForDisplay(customer!.phone)),
+                    ],
+                  ),
+                ),
+                TextButton(onPressed: onSelect, child: const Text('Change')),
+              ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            AppPrimaryButton(
-              label: 'Add product',
-              icon: Icons.add_rounded,
-              onPressed: selectedProduct == null ? null : onAdd,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
 
-class _InvoiceItemCard extends StatelessWidget {
-  const _InvoiceItemCard({
-    required this.item,
+class _ProductItemsSection extends StatelessWidget {
+  const _ProductItemsSection({
+    required this.items,
+    required this.products,
+    required this.onSelectProduct,
     required this.onChanged,
     required this.onRemove,
   });
 
-  final _InvoiceItemDraft item;
-  final ValueChanged<_InvoiceItemDraft> onChanged;
-  final VoidCallback onRemove;
+  final List<InvoiceItemDraft> items;
+  final List<ProductModel> products;
+  final VoidCallback onSelectProduct;
+  final void Function(int index, InvoiceItemDraft item) onChanged;
+  final ValueChanged<int> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: AppSectionTitle(
-                    title: item.product.name,
-                    subtitle:
-                        'Stock ${item.product.stockQuantity} ${item.product.unit} | GST ${item.gstRate}%',
-                  ),
+    return _SectionCard(
+      title: '2. Product items',
+      subtitle: 'Add products and adjust quantity, rate, and discount.',
+      icon: Icons.inventory_2_outlined,
+      child: Column(
+        children: [
+          AppSecondaryButton(
+            label: products.isEmpty ? 'No products available' : 'Add product',
+            icon: Icons.add_rounded,
+            onPressed: products.isEmpty ? null : onSelectProduct,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (items.isEmpty)
+            const AppEmptyState(
+              title: 'No products added',
+              message: 'Add products to calculate invoice totals.',
+              icon: Icons.add_shopping_cart_rounded,
+            )
+          else
+            ...items.asMap().entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: InvoiceItemCard(
+                  item: entry.value,
+                  onChanged: (item) => onChanged(entry.key, item),
+                  onRemove: () => onRemove(entry.key),
                 ),
-                IconButton(
-                  tooltip: 'Remove item',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.quantity.toString(),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(labelText: 'Qty'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(quantity: int.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.rate.toStringAsFixed(0),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Rate'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(rate: double.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: item.discount.toStringAsFixed(0),
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Discount'),
-                    onChanged: (value) {
-                      onChanged(
-                        item.copyWith(discount: double.tryParse(value) ?? 0),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppStatusChip(
-                    label: 'GST ${AppFormatters.currency(item.gstAmount)}',
-                    type: AppStatusType.info,
-                  ),
-                ),
-                Text(
-                  AppFormatters.currency(item.lineTotal),
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -507,172 +419,79 @@ class _PaymentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Payment'),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              label: 'Paid amount',
-              controller: paidController,
-              prefixIcon: Icons.payments_outlined,
-              keyboardType: TextInputType.number,
-              onChanged: (_) => onChanged(),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              label: 'Notes',
-              controller: notesController,
-              prefixIcon: Icons.note_alt_outlined,
-              maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InvoiceSummary extends StatelessWidget {
-  const _InvoiceSummary({
-    required this.subtotal,
-    required this.discountTotal,
-    required this.gstTotal,
-    required this.totalAmount,
-    required this.paidAmount,
-    required this.balanceAmount,
-    required this.paymentStatus,
-  });
-
-  final double subtotal;
-  final double discountTotal;
-  final double gstTotal;
-  final double totalAmount;
-  final double paidAmount;
-  final double balanceAmount;
-  final PaymentStatus paymentStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const Expanded(child: AppSectionTitle(title: 'Summary')),
-                AppStatusChip(
-                  label: paymentStatus.label,
-                  type: _statusType(paymentStatus),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SummaryRow('Subtotal', AppFormatters.currency(subtotal)),
-            _SummaryRow('Discount', AppFormatters.currency(discountTotal)),
-            _SummaryRow('GST', AppFormatters.currency(gstTotal)),
-            const Divider(height: AppSpacing.xl),
-            _SummaryRow('Total', AppFormatters.currency(totalAmount)),
-            _SummaryRow('Paid', AppFormatters.currency(paidAmount)),
-            _SummaryRow('Balance', AppFormatters.currency(balanceAmount)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
+    return _SectionCard(
+      title: '3. Discount/payment',
+      subtitle: 'Enter collected amount and optional notes.',
+      icon: Icons.payments_outlined,
+      child: Column(
         children: [
-          Expanded(child: Text(label)),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
+          AppTextField(
+            label: 'Paid amount',
+            controller: paidController,
+            prefixIcon: Icons.payments_outlined,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => onChanged(),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            label: 'Notes',
+            controller: notesController,
+            prefixIcon: Icons.note_alt_outlined,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+          ),
         ],
       ),
     );
   }
 }
 
-class _InvoiceItemDraft {
-  const _InvoiceItemDraft({
-    required this.product,
-    required this.quantity,
-    required this.rate,
-    required this.gstRate,
-    required this.discount,
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
   });
 
-  final ProductModel product;
-  final int quantity;
-  final double rate;
-  final double gstRate;
-  final double discount;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
 
-  double get taxableAmount {
-    final amount = quantity * rate - discount;
-    return amount < 0 ? 0 : amount;
-  }
-
-  double get gstAmount => taxableAmount * gstRate / 100;
-  double get lineTotal => taxableAmount + gstAmount;
-
-  factory _InvoiceItemDraft.fromProduct(ProductModel product) {
-    return _InvoiceItemDraft(
-      product: product,
-      quantity: 1,
-      rate: product.salePrice,
-      gstRate: product.gstRate,
-      discount: 0,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: AppRadius.mdRadius,
+                ),
+                child: Icon(icon, color: AppColors.primary),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: AppSectionHeader(title: title, subtitle: subtitle),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          child,
+        ],
+      ),
     );
   }
-
-  _InvoiceItemDraft copyWith({
-    int? quantity,
-    double? rate,
-    double? gstRate,
-    double? discount,
-  }) {
-    return _InvoiceItemDraft(
-      product: product,
-      quantity: quantity ?? this.quantity,
-      rate: rate ?? this.rate,
-      gstRate: gstRate ?? this.gstRate,
-      discount: discount ?? this.discount,
-    );
-  }
-
-  SalesInvoiceItem toInvoiceItem() {
-    return SalesInvoiceItem(
-      productId: product.id,
-      productName: product.name,
-      hsnCode: product.hsnCode,
-      quantity: quantity,
-      rate: rate,
-      gstRate: gstRate,
-      discount: discount,
-      unit: product.unit,
-    );
-  }
-}
-
-AppStatusType _statusType(PaymentStatus status) {
-  return switch (status) {
-    PaymentStatus.paid => AppStatusType.success,
-    PaymentStatus.partial => AppStatusType.warning,
-    PaymentStatus.unpaid => AppStatusType.danger,
-  };
 }

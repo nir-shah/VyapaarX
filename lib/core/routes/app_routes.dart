@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_roles.dart';
-import '../../screens/admin/admin_user_management_screen.dart';
 import '../../screens/advanced/advanced_erp_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/otp_screen.dart';
-import '../../screens/business/business_settings_screen.dart';
 import '../../screens/auth/splash_screen.dart';
 import '../../screens/business/business_setup_screen.dart';
 import '../../screens/customers/add_edit_customer_screen.dart';
@@ -24,6 +22,8 @@ import '../../screens/purchases/create_purchase_invoice_screen.dart';
 import '../../screens/purchases/purchase_invoice_detail_screen.dart';
 import '../../screens/purchases/purchase_invoice_list_screen.dart';
 import '../../screens/reports/reports_screen.dart';
+import '../../screens/settings/business_settings_screen.dart';
+import '../../screens/staff/admin_user_management_screen.dart';
 import '../../screens/vendors/add_edit_vendor_screen.dart';
 import '../../screens/vendors/vendor_detail_screen.dart';
 import '../../screens/vendors/vendor_list_screen.dart';
@@ -72,6 +72,39 @@ class AppRoutes {
   static const String advancedErp = '/advanced-erp';
   static const String payments = '/payments';
   static const String settings = '/settings';
+
+  static const List<String> navigationShellRoutes = [
+    dashboard,
+    invoices,
+    invoiceCreate,
+    invoiceDetail,
+    customers,
+    customerAdd,
+    customerEdit,
+    customerDetail,
+    inventory,
+    productAdd,
+    productEdit,
+    productDetail,
+    vendors,
+    vendorAdd,
+    vendorEdit,
+    vendorDetail,
+    purchaseInvoices,
+    purchaseCreate,
+    purchaseDetail,
+    expenses,
+    expenseAdd,
+    expenseEdit,
+    reports,
+    adminUsers,
+    advancedErp,
+    settings,
+  ];
+
+  static bool usesNavigationShell(String? routeName) {
+    return navigationShellRoutes.contains(routeName);
+  }
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     return switch (settings.name) {

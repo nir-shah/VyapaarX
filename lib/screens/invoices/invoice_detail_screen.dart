@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
 
-import '../../core/constants/app_spacing.dart';
+import '../../core/routes/app_routes.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../models/business_model.dart';
@@ -14,6 +18,7 @@ import '../../services/invoice_service.dart';
 import '../../services/pdf_invoice_service.dart';
 import '../../services/whatsapp_service.dart';
 import '../../widgets/widgets.dart';
+import 'widgets/invoice_summary_card.dart';
 
 class InvoiceDetailScreen extends StatelessWidget {
   const InvoiceDetailScreen({super.key, required this.invoice});
@@ -43,7 +48,35 @@ class InvoiceDetailScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _shareInvoice(
+  Future<void> _sharePdf(
+    BuildContext context,
+    SalesInvoiceModel invoice,
+  ) async {
+    try {
+      final data = await _loadInvoiceShareData(context, invoice);
+      if (data == null) return;
+
+      final pdfBytes = await const PdfInvoiceService().generateInvoicePdf(
+        business: data.business,
+        customer: data.customer,
+        invoice: invoice,
+      );
+
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: '${invoice.invoiceNumber}.pdf',
+      );
+    } on Object catch (_) {
+      if (!context.mounted) return;
+      SnackBarHelper.show(
+        context,
+        message: 'Unable to share invoice PDF.',
+        type: AppSnackBarType.error,
+      );
+    }
+  }
+
+  Future<void> _shareWhatsApp(
     BuildContext context,
     SalesInvoiceModel invoice,
   ) async {
@@ -66,7 +99,7 @@ class InvoiceDetailScreen extends StatelessWidget {
       if (!context.mounted) return;
       SnackBarHelper.show(
         context,
-        message: 'Unable to share invoice PDF.',
+        message: 'Unable to share invoice on WhatsApp.',
         type: AppSnackBarType.error,
       );
     }
@@ -100,7 +133,8 @@ class InvoiceDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final businessId = context.watch<AuthProvider>().businessId;
+    final auth = context.watch<AuthProvider>();
+    final businessId = auth.businessId;
 
     if (businessId == null || businessId.isEmpty) {
       return const Scaffold(
@@ -121,209 +155,281 @@ class InvoiceDetailScreen extends StatelessWidget {
       builder: (context, snapshot) {
         final currentInvoice = snapshot.data;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Invoice detail'),
-            actions: [
-              if (currentInvoice != null)
-                IconButton(
-                  tooltip: 'Print PDF',
-                  onPressed: () => _printInvoice(context, currentInvoice),
-                  icon: const Icon(Icons.print_outlined),
-                ),
-              if (currentInvoice != null)
-                IconButton(
-                  tooltip: 'Share invoice',
-                  onPressed: () => _shareInvoice(context, currentInvoice),
-                  icon: const Icon(Icons.share_outlined),
-                ),
-            ],
-          ),
-          body: SafeArea(
-            child: currentInvoice == null
-                ? const AppEmptyState(
-                    title: 'Invoice not found',
-                    message: 'This invoice may no longer exist.',
-                    icon: Icons.receipt_long_outlined,
-                  )
-                : ListView(
-                    padding: AppSpacing.responsiveScreenPadding(context),
-                    children: [
-                      _InvoiceHeader(invoice: currentInvoice),
-                      const SizedBox(height: AppSpacing.lg),
-                      _ItemsCard(invoice: currentInvoice),
+        return AppResponsiveShell(
+          title: 'Invoice detail',
+          currentRoute: AppRoutes.invoiceDetail,
+          currentRole: auth.role,
+          actions: [
+            if (currentInvoice != null)
+              IconButton(
+                tooltip: 'Print',
+                onPressed: () => _printInvoice(context, currentInvoice),
+                icon: const Icon(Icons.print_outlined),
+              ),
+            if (currentInvoice != null)
+              IconButton(
+                tooltip: 'Share PDF',
+                onPressed: () => _sharePdf(context, currentInvoice),
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+              ),
+            if (currentInvoice != null)
+              IconButton(
+                tooltip: 'WhatsApp',
+                onPressed: () => _shareWhatsApp(context, currentInvoice),
+                icon: const Icon(Icons.chat_outlined),
+              ),
+          ],
+          child: currentInvoice == null
+              ? const AppEmptyState(
+                  title: 'Invoice not found',
+                  message: 'This invoice may no longer exist.',
+                  icon: Icons.receipt_long_outlined,
+                )
+              : ListView(
+                  padding: AppSpacing.responsiveScreenPadding(context),
+                  children: [
+                    _InvoicePreview(invoice: currentInvoice),
+                    const SizedBox(height: AppSpacing.md),
+                    _ActionBar(
+                      onPrint: () => _printInvoice(context, currentInvoice),
+                      onPdf: () => _sharePdf(context, currentInvoice),
+                      onWhatsApp: () => _shareWhatsApp(context, currentInvoice),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    InvoiceSummaryCard(
+                      subtotal: currentInvoice.subtotal,
+                      discountTotal: currentInvoice.discountTotal,
+                      gstTotal: currentInvoice.gstTotal,
+                      totalAmount: currentInvoice.totalAmount,
+                      paidAmount: currentInvoice.paidAmount,
+                      balanceAmount: currentInvoice.balanceAmount,
+                      paymentStatus: currentInvoice.paymentStatus,
+                    ),
+                    if (currentInvoice.notes.trim().isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
-                      _SummaryCard(invoice: currentInvoice),
-                      if (currentInvoice.notes.trim().isNotEmpty) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        Card(
-                          child: Padding(
-                            padding: AppSpacing.cardPadding,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const AppSectionTitle(title: 'Notes'),
-                                const SizedBox(height: AppSpacing.sm),
-                                Text(currentInvoice.notes),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                      _NotesCard(notes: currentInvoice.notes),
                     ],
-                  ),
-          ),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                ),
         );
       },
     );
   }
 }
 
-class _InvoiceHeader extends StatelessWidget {
-  const _InvoiceHeader({required this.invoice});
+class _InvoicePreview extends StatelessWidget {
+  const _InvoicePreview({required this.invoice});
 
   final SalesInvoiceModel invoice;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xxlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: AppSectionHeader(
+                  title: invoice.invoiceNumber,
+                  subtitle: 'GST Invoice • ${invoice.customerName}',
+                ),
+              ),
+              AppStatusChip(
+                label: invoice.paymentStatus.label,
+                type: invoiceStatusType(invoice.paymentStatus),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: AppRadius.xlRadius,
+            ),
+            child: Row(
               children: [
                 Expanded(
-                  child: AppSectionTitle(
-                    title: invoice.invoiceNumber,
-                    subtitle: invoice.customerName,
+                  child: _PreviewMetric(
+                    label: 'Total',
+                    value: AppFormatters.currency(invoice.totalAmount),
                   ),
                 ),
-                AppStatusChip(
-                  label: invoice.paymentStatus.label,
-                  type: _statusType(invoice.paymentStatus),
+                Expanded(
+                  child: _PreviewMetric(
+                    label: 'Paid',
+                    value: AppFormatters.currency(invoice.paidAmount),
+                  ),
+                ),
+                Expanded(
+                  child: _PreviewMetric(
+                    label: 'Balance',
+                    value: AppFormatters.currency(invoice.balanceAmount),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              AppFormatters.currency(invoice.totalAmount),
-              style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          const AppSectionHeader(title: 'Items'),
+          const SizedBox(height: AppSpacing.md),
+          ...invoice.items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _InvoiceLine(item: item),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ItemsCard extends StatelessWidget {
-  const _ItemsCard({required this.invoice});
-
-  final SalesInvoiceModel invoice;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(title: 'Items'),
-            const SizedBox(height: AppSpacing.md),
-            ...invoice.items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.productName,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          Text(
-                            '${item.quantity} ${item.unit} x ${AppFormatters.currency(item.rate)} | GST ${item.gstRate}%',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(AppFormatters.currency(item.lineTotal)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.invoice});
-
-  final SalesInvoiceModel invoice;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          children: [
-            _SummaryRow('Subtotal', AppFormatters.currency(invoice.subtotal)),
-            _SummaryRow(
-              'Discount',
-              AppFormatters.currency(invoice.discountTotal),
-            ),
-            _SummaryRow('GST', AppFormatters.currency(invoice.gstTotal)),
-            const Divider(height: AppSpacing.xl),
-            _SummaryRow('Total', AppFormatters.currency(invoice.totalAmount)),
-            _SummaryRow('Paid', AppFormatters.currency(invoice.paidAmount)),
-            _SummaryRow(
-              'Balance',
-              AppFormatters.currency(invoice.balanceAmount),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
+          ),
         ],
       ),
     );
   }
 }
 
-AppStatusType _statusType(PaymentStatus status) {
-  return switch (status) {
-    PaymentStatus.paid => AppStatusType.success,
-    PaymentStatus.partial => AppStatusType.warning,
-    PaymentStatus.unpaid => AppStatusType.danger,
-  };
+class _InvoiceLine extends StatelessWidget {
+  const _InvoiceLine({required this.item});
+
+  final SalesInvoiceItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSoft,
+        borderRadius: AppRadius.lgRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.productName,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${item.quantity} ${item.unit} x ${AppFormatters.currency(item.rate)} • GST ${item.gstRate.toStringAsFixed(0)}%',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          Text(
+            AppFormatters.currency(item.lineTotal),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewMetric extends StatelessWidget {
+  const _PreviewMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.onPrint,
+    required this.onPdf,
+    required this.onWhatsApp,
+  });
+
+  final VoidCallback onPrint;
+  final VoidCallback onPdf;
+  final VoidCallback onWhatsApp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: AppSecondaryButton(
+            label: 'Print',
+            icon: Icons.print_outlined,
+            onPressed: onPrint,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: AppSecondaryButton(
+            label: 'PDF',
+            icon: Icons.picture_as_pdf_outlined,
+            onPressed: onPdf,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: AppSecondaryButton(
+            label: 'WhatsApp',
+            icon: Icons.chat_outlined,
+            onPressed: onWhatsApp,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotesCard extends StatelessWidget {
+  const _NotesCard({required this.notes});
+
+  final String notes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.xlRadius,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(title: 'Notes'),
+          const SizedBox(height: AppSpacing.sm),
+          Text(notes),
+        ],
+      ),
+    );
+  }
 }
 
 class _InvoiceShareData {

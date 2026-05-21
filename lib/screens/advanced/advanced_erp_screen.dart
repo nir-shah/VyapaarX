@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../core/routes/app_routes.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../core/utils/validators.dart';
@@ -303,76 +304,75 @@ class _AdvancedErpScreenState extends State<AdvancedErpScreen> {
     final businessId = auth.businessId;
     final actorId = auth.session?.uid ?? 'unknown';
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Advanced ERP')),
-      body: SafeArea(
-        child: businessId == null || businessId.isEmpty
-            ? const AppEmptyState(
-                title: 'Business profile needed',
-                message: 'Complete business setup before using ERP features.',
-                icon: Icons.hub_outlined,
-              )
-            : ListView(
-                padding: AppSpacing.responsiveScreenPadding(context),
-                children: [
-                  const AppSectionTitle(
-                    title: 'Advanced ERP',
-                    subtitle:
-                        'Operations, CRM, tasks, exports, backups, devices, and audit controls.',
+    return AppResponsiveShell(
+      title: 'Advanced ERP',
+      currentRoute: AppRoutes.advancedErp,
+      currentRole: auth.role,
+      child: businessId == null || businessId.isEmpty
+          ? const AppEmptyState(
+              title: 'Business profile needed',
+              message: 'Complete business setup before using ERP features.',
+              icon: Icons.hub_outlined,
+            )
+          : ListView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+              children: [
+                const AppSectionHeader(
+                  title: 'Advanced ERP',
+                  subtitle:
+                      'Operations, CRM, tasks, exports, backups, devices, and audit controls.',
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                _DeviceCard(
+                  barcodeController: _barcodeController,
+                  barcodeLookup: _barcodeLookup,
+                  onLookup: () => _lookupBarcode(businessId),
+                  onThermalPrint: _isWorking
+                      ? null
+                      : () => _printThermalReceipt(businessId),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _WarehousesCard(
+                  stream: _service.watchWarehouses(businessId),
+                  onAdd: () => _addWarehouse(businessId, actorId),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _CrmCard(
+                  stream: _service.watchLeads(businessId),
+                  onAdd: () => _addLead(businessId, actorId),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _TasksCard(
+                  stream: _service.watchTasks(businessId),
+                  onAdd: () => _addTask(businessId, actorId),
+                  onChanged: (task, done) => _service.setTaskDone(
+                    businessId: businessId,
+                    actorId: actorId,
+                    task: task,
+                    isDone: done,
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _DeviceCard(
-                    barcodeController: _barcodeController,
-                    barcodeLookup: _barcodeLookup,
-                    onLookup: () => _lookupBarcode(businessId),
-                    onThermalPrint: _isWorking
-                        ? null
-                        : () => _printThermalReceipt(businessId),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _NotificationsCard(
+                  stream: _service.watchNotifications(businessId),
+                  onAdd: () => _addNotification(businessId, actorId),
+                  onRead: (notification) => _service.markNotificationRead(
+                    businessId: businessId,
+                    notification: notification,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  _WarehousesCard(
-                    stream: _service.watchWarehouses(businessId),
-                    onAdd: () => _addWarehouse(businessId, actorId),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _CrmCard(
-                    stream: _service.watchLeads(businessId),
-                    onAdd: () => _addLead(businessId, actorId),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _TasksCard(
-                    stream: _service.watchTasks(businessId),
-                    onAdd: () => _addTask(businessId, actorId),
-                    onChanged: (task, done) => _service.setTaskDone(
-                      businessId: businessId,
-                      actorId: actorId,
-                      task: task,
-                      isDone: done,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _NotificationsCard(
-                    stream: _service.watchNotifications(businessId),
-                    onAdd: () => _addNotification(businessId, actorId),
-                    onRead: (notification) => _service.markNotificationRead(
-                      businessId: businessId,
-                      notification: notification,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _ExportsCard(
-                    isWorking: _isWorking,
-                    onGstExport: () => _buildGstExport(businessId),
-                    onBackup: () => _buildBackup(businessId),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _OfflineSyncCard(),
-                  const SizedBox(height: AppSpacing.md),
-                  _AuditLogsCard(stream: _service.watchAuditLogs(businessId)),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
-              ),
-      ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _ExportsCard(
+                  isWorking: _isWorking,
+                  onGstExport: () => _buildGstExport(businessId),
+                  onBackup: () => _buildBackup(businessId),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _OfflineSyncCard(),
+                const SizedBox(height: AppSpacing.md),
+                _AuditLogsCard(stream: _service.watchAuditLogs(businessId)),
+              ],
+            ),
     );
   }
 }
@@ -401,74 +401,95 @@ class _DeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(
-              title: 'Barcode and devices',
-              subtitle: 'Lookup products by barcode and test thermal printing.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              label: 'Barcode',
-              controller: barcodeController,
-              prefixIcon: Icons.qr_code_scanner_rounded,
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppPrimaryButton(
-                    label: 'Lookup',
-                    icon: Icons.search_rounded,
-                    onPressed: onLookup,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppPrimaryButton(
-                    label: 'Thermal test',
-                    icon: Icons.print_outlined,
-                    onPressed: onThermalPrint,
-                  ),
-                ),
-              ],
-            ),
-            if (barcodeLookup != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              FutureBuilder<ProductModel?>(
-                future: barcodeLookup,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const LinearProgressIndicator();
-                  }
-                  final product = snapshot.data;
-                  if (product == null) {
-                    return const AppStatusChip(
-                      label: 'No product found',
-                      type: AppStatusType.warning,
-                    );
-                  }
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.inventory_2_outlined),
+    return ModernCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            title: 'Barcode and devices',
+            subtitle: 'Lookup products by barcode and test thermal printing.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            label: 'Barcode',
+            controller: barcodeController,
+            prefixIcon: Icons.qr_code_scanner_rounded,
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 520;
+              return Flex(
+                direction: stacked ? Axis.vertical : Axis.horizontal,
+                children: [
+                  if (stacked)
+                    AppPrimaryButton(
+                      label: 'Lookup',
+                      icon: Icons.search_rounded,
+                      onPressed: onLookup,
+                    )
+                  else
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'Lookup',
+                        icon: Icons.search_rounded,
+                        onPressed: onLookup,
+                      ),
                     ),
-                    title: Text(product.name),
-                    subtitle: Text(
-                      'Stock ${product.stockQuantity} ${product.unit}',
+                  SizedBox(
+                    width: stacked ? 0 : AppSpacing.sm,
+                    height: stacked ? AppSpacing.sm : 0,
+                  ),
+                  if (stacked)
+                    AppPrimaryButton(
+                      label: 'Thermal test',
+                      icon: Icons.print_outlined,
+                      onPressed: onThermalPrint,
+                    )
+                  else
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'Thermal test',
+                        icon: Icons.print_outlined,
+                        onPressed: onThermalPrint,
+                      ),
                     ),
-                    trailing: Text(AppFormatters.currency(product.salePrice)),
+                ],
+              );
+            },
+          ),
+          if (barcodeLookup != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            FutureBuilder<ProductModel?>(
+              future: barcodeLookup,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LoadingSkeleton(height: 48);
+                }
+                final product = snapshot.data;
+                if (product == null) {
+                  return const AppStatusChip(
+                    label: 'No product found',
+                    type: AppStatusType.warning,
                   );
-                },
-              ),
-            ],
+                }
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.inventory_2_outlined),
+                  ),
+                  title: Text(product.name),
+                  subtitle: Text(
+                    'Stock ${product.stockQuantity} ${product.unit}',
+                  ),
+                  trailing: Text(AppFormatters.currency(product.salePrice)),
+                );
+              },
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -617,47 +638,43 @@ class _StreamCard<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: AppColors.primary),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppSectionTitle(title: title, subtitle: subtitle),
-                ),
-                IconButton(
-                  tooltip: 'Add',
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            StreamBuilder<List<T>>(
-              stream: stream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const LinearProgressIndicator();
-                }
-                final items = snapshot.data ?? [];
-                if (items.isEmpty) {
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(emptyText),
-                  );
-                }
-                return Column(
-                  children: items.take(4).map(itemBuilder).toList(),
+    return ModernCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppSectionHeader(title: title, subtitle: subtitle),
+              ),
+              IconButton(
+                tooltip: 'Add',
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          StreamBuilder<List<T>>(
+            stream: stream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !snapshot.hasData) {
+                return const LoadingSkeleton(height: 46);
+              }
+              final items = snapshot.data ?? [];
+              if (items.isEmpty) {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(emptyText),
                 );
-              },
-            ),
-          ],
-        ),
+              }
+              return Column(children: items.take(4).map(itemBuilder).toList());
+            },
+          ),
+        ],
       ),
     );
   }
@@ -676,44 +693,67 @@ class _ExportsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(
-              title: 'Exports and backup',
-              subtitle: 'Generate GST CSV and business backup JSON.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppPrimaryButton(
-                    label: 'GST export',
-                    icon: Icons.file_download_outlined,
-                    isLoading: isWorking,
-                    onPressed: isWorking ? null : onGstExport,
+    return ModernCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            title: 'Exports and backup',
+            subtitle: 'Generate GST CSV and business backup JSON.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 520;
+              return Flex(
+                direction: stacked ? Axis.vertical : Axis.horizontal,
+                children: [
+                  if (stacked)
+                    AppPrimaryButton(
+                      label: 'GST export',
+                      icon: Icons.file_download_outlined,
+                      isLoading: isWorking,
+                      onPressed: isWorking ? null : onGstExport,
+                    )
+                  else
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'GST export',
+                        icon: Icons.file_download_outlined,
+                        isLoading: isWorking,
+                        onPressed: isWorking ? null : onGstExport,
+                      ),
+                    ),
+                  SizedBox(
+                    width: stacked ? 0 : AppSpacing.sm,
+                    height: stacked ? AppSpacing.sm : 0,
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppPrimaryButton(
-                    label: 'Backup',
-                    icon: Icons.backup_outlined,
-                    isLoading: isWorking,
-                    onPressed: isWorking ? null : onBackup,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'Restore is intentionally review-first: use exported JSON for safe manual restore or a future admin import flow.',
-            ),
-          ],
-        ),
+                  if (stacked)
+                    AppPrimaryButton(
+                      label: 'Backup',
+                      icon: Icons.backup_outlined,
+                      isLoading: isWorking,
+                      onPressed: isWorking ? null : onBackup,
+                    )
+                  else
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'Backup',
+                        icon: Icons.backup_outlined,
+                        isLoading: isWorking,
+                        onPressed: isWorking ? null : onBackup,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const Text(
+            'Restore is intentionally review-first: use exported JSON for safe manual restore or a future admin import flow.',
+          ),
+        ],
       ),
     );
   }
@@ -740,41 +780,39 @@ class _AuditLogsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: AppSpacing.cardPadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AppSectionTitle(
-              title: 'Audit logs',
-              subtitle: 'Recent advanced ERP activity.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            StreamBuilder<List<AuditLogModel>>(
-              stream: stream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !snapshot.hasData) {
-                  return const LinearProgressIndicator();
-                }
-                final logs = snapshot.data ?? [];
-                if (logs.isEmpty) return const Text('No audit logs yet.');
+    return ModernCard(
+      padding: AppSpacing.cardPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            title: 'Audit logs',
+            subtitle: 'Recent advanced ERP activity.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          StreamBuilder<List<AuditLogModel>>(
+            stream: stream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !snapshot.hasData) {
+                return const LoadingSkeleton(height: 46);
+              }
+              final logs = snapshot.data ?? [];
+              if (logs.isEmpty) return const Text('No audit logs yet.');
 
-                return Column(
-                  children: logs.take(6).map((log) {
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${log.module} ${log.action}'),
-                      subtitle: Text(log.description),
-                      trailing: const Icon(Icons.history_rounded),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
-        ),
+              return Column(
+                children: logs.take(6).map((log) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${log.module} ${log.action}'),
+                    subtitle: Text(log.description),
+                    trailing: const Icon(Icons.history_rounded),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
