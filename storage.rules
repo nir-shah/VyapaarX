@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isReasonableLogoSize() {
+      return request.resource.size < 2 * 1024 * 1024;
+    }
+
+    function userProfile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function activeBusinessId() {
+      return userProfile().data.businessId;
+    }
+
+    function activeRole() {
+      return userProfile().data.role;
+    }
+
+    function isActiveUser() {
+      return isSignedIn()
+        && (!('status' in userProfile().data)
+          || userProfile().data.status == 'active');
+    }
+
+    function canManageBusiness(businessId) {
+      return isActiveUser()
+        && activeBusinessId() == businessId
+        && activeRole() in ['owner', 'admin'];
+    }
+
+    match /businesses/{businessId}/logo/{fileName} {
+      allow read: if isActiveUser() && activeBusinessId() == businessId;
+      allow write: if isSignedIn()
+        && canManageBusiness(businessId)
+        && isImage()
+        && isReasonableLogoSize()
+        && request.resource.metadata.businessId == businessId;
+    }
+  }
+}

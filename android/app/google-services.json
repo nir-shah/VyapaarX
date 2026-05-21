@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "3743105992",
+    "project_id": "vyapaarx-1",
+    "storage_bucket": "vyapaarx-1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:3743105992:android:13dde6217044d9bd9af6fd",
+        "android_client_info": {
+          "package_name": "com.vyapaarx.vyapaarx"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "3743105992-ttdr4nnus5np0vaqs3tivh2hrti7cg3b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcLaEjGA137sAc-_JY77asydn9MZPxon8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "3743105992-ttdr4nnus5np0vaqs3tivh2hrti7cg3b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "3743105992-tap8k97sj028vheuhk689e6bgs85li20.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.vyapaarx.vyapaarx"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

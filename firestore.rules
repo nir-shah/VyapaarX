@@ -1,0 +1,164 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function signedInUid() {
+      return request.auth.uid;
+    }
+
+    function userProfile(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/users/$(signedInUid()));
+    }
+
+    function activeBusinessId() {
+      return userProfile(signedInUid()).data.businessId;
+    }
+
+    function activeRole() {
+      return userProfile(signedInUid()).data.role;
+    }
+
+    function hasActiveBusiness() {
+      return hasUserProfile()
+        && activeBusinessId() is string
+        && activeBusinessId().size() > 0;
+    }
+
+    function isActiveUser() {
+      return hasUserProfile()
+        && (!('status' in userProfile(signedInUid()).data)
+          || userProfile(signedInUid()).data.status == 'active');
+    }
+
+    function isOwnProfile(uid) {
+      return isSignedIn() && signedInUid() == uid;
+    }
+
+    function isBusinessScoped(businessId) {
+      return isSignedIn()
+        && isActiveUser()
+        && hasActiveBusiness()
+        && activeBusinessId() == businessId;
+    }
+
+    function validRole(role) {
+      return role in ['owner', 'admin', 'accounts', 'sales', 'warehouse', 'staff'];
+    }
+
+    function validStatus(status) {
+      return status in ['active', 'disabled'];
+    }
+
+    function canManageUsers() {
+      return isSignedIn()
+        && isActiveUser()
+        && activeRole() in ['owner', 'admin'];
+    }
+
+    function canManageOwnerRole() {
+      return isSignedIn()
+        && isActiveUser()
+        && activeRole() == 'owner';
+    }
+
+    function canReadCollection(collection) {
+      return activeRole() in ['owner', 'admin']
+        || (activeRole() == 'accounts'
+          && collection in ['customers', 'vendors', 'products', 'salesInvoices', 'purchaseInvoices', 'expenses', 'warehouses', 'crmLeads', 'tasks', 'notifications', 'auditLogs'])
+        || (activeRole() == 'sales'
+          && collection in ['customers', 'products', 'salesInvoices', 'crmLeads', 'tasks', 'notifications'])
+        || (activeRole() == 'warehouse'
+          && collection in ['vendors', 'products', 'purchaseInvoices', 'warehouses', 'tasks', 'notifications'])
+        || (activeRole() == 'staff'
+          && collection in ['customers', 'products', 'salesInvoices', 'tasks', 'notifications']);
+    }
+
+    function canWriteCollection(collection) {
+      return activeRole() in ['owner', 'admin']
+        || (activeRole() == 'accounts'
+          && collection in ['customers', 'vendors', 'products', 'purchaseInvoices', 'expenses', 'crmLeads', 'tasks', 'notifications', 'auditLogs'])
+        || (activeRole() == 'sales'
+          && collection in ['customers', 'salesInvoices', 'crmLeads', 'tasks', 'notifications', 'auditLogs'])
+        || (activeRole() == 'warehouse'
+          && collection in ['products', 'warehouses', 'tasks', 'notifications', 'auditLogs'])
+        || (activeRole() == 'staff'
+          && collection in ['salesInvoices', 'tasks', 'notifications', 'auditLogs']);
+    }
+
+    function claimedBusinessAfter(businessId) {
+      return getAfter(/databases/$(database)/documents/businesses/$(businessId));
+    }
+
+    function canClaimBusiness(businessId) {
+      return isSignedIn()
+        && businessId is string
+        && businessId.size() > 0
+        && claimedBusinessAfter(businessId).data.businessId == businessId
+        && claimedBusinessAfter(businessId).data.ownerUid == signedInUid();
+    }
+
+    match /users/{uid} {
+      allow read: if isOwnProfile(uid)
+        || (canManageUsers()
+          && resource.data.businessId == activeBusinessId());
+      allow create: if isOwnProfile(uid)
+        && canClaimBusiness(request.resource.data.businessId)
+        || (canManageUsers()
+          && request.resource.data.businessId == activeBusinessId()
+          && validRole(request.resource.data.role)
+          && validStatus(request.resource.data.status)
+          && (request.resource.data.role != 'owner' || canManageOwnerRole()));
+      allow update: if isOwnProfile(uid)
+        && (
+          (
+            request.resource.data.businessId == resource.data.businessId
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.status == resource.data.status
+          )
+          || canClaimBusiness(request.resource.data.businessId)
+        )
+        || (canManageUsers()
+          && resource.data.businessId == activeBusinessId()
+          && request.resource.data.businessId == activeBusinessId()
+          && validRole(request.resource.data.role)
+          && validStatus(request.resource.data.status)
+          && (resource.data.role != 'owner' || canManageOwnerRole())
+          && (request.resource.data.role != 'owner' || canManageOwnerRole()));
+      allow delete: if false;
+    }
+
+    match /businesses/{businessId} {
+      allow read: if isBusinessScoped(businessId);
+      allow create: if isSignedIn()
+        && request.resource.data.businessId == businessId
+        && request.resource.data.ownerUid == signedInUid();
+      allow update: if isBusinessScoped(businessId)
+        && canManageUsers()
+        && request.resource.data.businessId == businessId;
+      allow delete: if false;
+    }
+
+    match /{collection}/{document} {
+      allow read: if isSignedIn()
+        && resource.data.businessId is string
+        && isBusinessScoped(resource.data.businessId)
+        && canReadCollection(collection);
+      allow update, delete: if isSignedIn()
+        && resource.data.businessId is string
+        && isBusinessScoped(resource.data.businessId)
+        && canWriteCollection(collection);
+      allow create: if isSignedIn()
+        && request.resource.data.businessId is string
+        && isBusinessScoped(request.resource.data.businessId)
+        && canWriteCollection(collection);
+    }
+  }
+}
