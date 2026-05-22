@@ -23,6 +23,7 @@ import '../../screens/purchases/purchase_invoice_detail_screen.dart';
 import '../../screens/purchases/purchase_invoice_list_screen.dart';
 import '../../screens/reports/reports_screen.dart';
 import '../../screens/settings/business_settings_screen.dart';
+import '../../screens/settings/theme_selection_screen.dart';
 import '../../screens/staff/admin_user_management_screen.dart';
 import '../../screens/vendors/add_edit_vendor_screen.dart';
 import '../../screens/vendors/vendor_detail_screen.dart';
@@ -72,6 +73,7 @@ class AppRoutes {
   static const String advancedErp = '/advanced-erp';
   static const String payments = '/payments';
   static const String settings = '/settings';
+  static const String themeSelection = '/theme-selection';
 
   static const List<String> navigationShellRoutes = [
     dashboard,
@@ -100,6 +102,7 @@ class AppRoutes {
     adminUsers,
     advancedErp,
     settings,
+    themeSelection,
   ];
 
   static bool usesNavigationShell(String? routeName) {
@@ -242,6 +245,13 @@ class AppRoutes {
       AppRoutes.settings => _materialRoute(
         _protected(
           const BusinessSettingsScreen(),
+          module: AppModules.businessSettings,
+        ),
+        settings,
+      ),
+      themeSelection => _materialRoute(
+        _protected(
+          const ThemeSelectionScreen(),
           module: AppModules.businessSettings,
         ),
         settings,

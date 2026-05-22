@@ -45,7 +45,7 @@ class Validators {
 
   static String? gstin(String? value) {
     final gstin = (value ?? '').trim().toUpperCase();
-    if (gstin.isEmpty) return 'GSTIN is required.';
+    if (gstin.isEmpty) return null;
     if (!_gstinPattern.hasMatch(gstin)) {
       return 'Enter a valid 15 character GSTIN.';
     }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/routes/app_routes.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../providers/auth_provider.dart';
@@ -21,6 +20,7 @@ class AppTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final auth = context.watch<AuthProvider>();
     final resolvedName = businessName?.trim().isNotEmpty == true
         ? businessName!.trim()
@@ -31,9 +31,13 @@ class AppTopBar extends StatelessWidget {
     return Container(
       height: 76,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.onSurface.withValues(alpha: 0.06),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -45,15 +49,15 @@ class AppTopBar extends StatelessWidget {
                 Text(title, style: Theme.of(context).textTheme.titleLarge),
                 Text(
                   resolvedName,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurface.withValues(alpha: 0.56),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: AppSpacing.lg),
-          const _TopBarSearch(),
+          _TopBarSearch(colorScheme: colorScheme),
           const SizedBox(width: AppSpacing.md),
           ...actions,
           const SizedBox(width: AppSpacing.sm),
@@ -65,7 +69,9 @@ class AppTopBar extends StatelessWidget {
 }
 
 class _TopBarSearch extends StatelessWidget {
-  const _TopBarSearch();
+  const _TopBarSearch({required this.colorScheme});
+
+  final ColorScheme colorScheme;
 
   @override
   Widget build(BuildContext context) {
@@ -75,15 +81,17 @@ class _TopBarSearch extends StatelessWidget {
         height: 44,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: colorScheme.surface,
           borderRadius: AppRadius.mdRadius,
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: colorScheme.onSurface.withValues(alpha: 0.06),
+          ),
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.search_rounded,
-              color: AppColors.textMuted,
+              color: colorScheme.onSurface.withValues(alpha: 0.46),
               size: 20,
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -91,9 +99,9 @@ class _TopBarSearch extends StatelessWidget {
               child: Text(
                 'Search invoices, customers...',
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.46),
+                ),
               ),
             ),
           ],
@@ -110,6 +118,7 @@ class _ProfileMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final label = (auth.session?.displayName ?? auth.session?.email ?? 'User')
         .trim();
     final initial = label.isEmpty ? 'U' : label.characters.first.toUpperCase();
@@ -134,12 +143,12 @@ class _ProfileMenu extends StatelessWidget {
       ],
       child: CircleAvatar(
         radius: 20,
-        backgroundColor: AppColors.primaryLight,
+        backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
         child: Text(
           initial,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w900,
+            color: colorScheme.primary,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),

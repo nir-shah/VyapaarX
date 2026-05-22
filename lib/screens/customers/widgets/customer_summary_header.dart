@@ -31,7 +31,7 @@ class CustomerSummaryHeader extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0F766E), Color(0xFF2563EB)],
+          colors: [AppColors.primary, AppColors.secondary],
         ),
         borderRadius: AppRadius.xxlRadius,
       ),

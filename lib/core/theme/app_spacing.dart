@@ -16,8 +16,10 @@ class AppSpacing {
 
   static const double mobileMaxWidth = 560;
   static const double tabletMaxWidth = 820;
-  static const double desktopContentMaxWidth = 1180;
-  static const double formMaxWidth = 480;
+  static const double desktopContentMaxWidth = 1200;
+  static const double wideContentMaxWidth = 1360;
+  static const double formMaxWidth = 520;
+  static const double narrowFormMaxWidth = 440;
 
   static const EdgeInsets screenPadding = EdgeInsets.all(md);
   static const EdgeInsets cardPadding = EdgeInsets.all(lg);
@@ -42,6 +44,7 @@ class AppSpacing {
 
   static double responsiveMaxWidth(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    if (width >= 1600) return wideContentMaxWidth;
     if (width >= 1200) return desktopContentMaxWidth;
     if (width >= 700) return tabletMaxWidth;
     return double.infinity;

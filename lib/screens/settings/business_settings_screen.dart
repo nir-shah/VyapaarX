@@ -7,10 +7,12 @@ import '../../core/routes/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme_tokens.dart';
 import '../../core/utils/snackbar_helper.dart';
 import '../../core/utils/validators.dart';
 import '../../models/business_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../services/business_service.dart';
 import '../../widgets/widgets.dart';
 import 'widgets/logo_upload_card.dart';
@@ -105,13 +107,26 @@ class _BusinessSettingsScreenState extends State<BusinessSettingsScreen> {
 
     setState(() => _isSaving = true);
     try {
+      final gstin = _gstinController.text.trim().toUpperCase();
+      debugPrint('Business settings save started.');
+      debugPrint('Current businessId: ${business.businessId}');
+      debugPrint(
+        'Business settings values: phone=${_normalizeIndianPhone(_phoneController.text)}, '
+        'email=${_emailController.text.trim()}, gstin=${gstin.isEmpty ? '(empty)' : gstin}, '
+        'address=${_addressController.text.trim()}',
+      );
+      debugPrint(
+        _logoBytes == null
+            ? 'Business settings logo upload skipped: no logo selected.'
+            : 'Business settings logo will upload. file=$_logoName bytes=${_logoBytes!.length}',
+      );
       final updatedBusiness = business.copyWith(
         address: _addressController.text.trim(),
         phone: _normalizeIndianPhone(_phoneController.text),
         alternatePhone: _optionalPhone(_alternatePhoneController.text),
         clearAlternatePhone: _alternatePhoneController.text.trim().isEmpty,
         email: _emailController.text.trim(),
-        gstin: _gstinController.text.trim().toUpperCase(),
+        gstin: gstin,
         preferences: {
           ...business.preferences,
           'whatsappQuickActions': _whatsappQuickActions,
@@ -139,7 +154,9 @@ class _BusinessSettingsScreenState extends State<BusinessSettingsScreen> {
         message: 'Business settings updated.',
         type: AppSnackBarType.success,
       );
-    } on Object catch (_) {
+    } on Object catch (error, stackTrace) {
+      debugPrint('Business settings save failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       SnackBarHelper.show(
         context,
@@ -286,6 +303,8 @@ class _BusinessSettingsForm extends StatelessWidget {
             children: [
               _BusinessProfileCard(business: business),
               const SizedBox(height: AppSpacing.lg),
+              const _AppearanceCard(),
+              const SizedBox(height: AppSpacing.lg),
               LogoUploadCard(
                 businessName: business.name,
                 logoBytes: logoBytes,
@@ -314,7 +333,7 @@ class _BusinessSettingsForm extends StatelessWidget {
                         );
                       }),
                     ],
-                    validator: Validators.gstin,
+                    validator: Validators.optionalGstin,
                   ),
                 ],
               ),
@@ -414,6 +433,73 @@ class _BusinessSettingsForm extends StatelessWidget {
   }
 }
 
+class _AppearanceCard extends StatelessWidget {
+  const _AppearanceCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final tokens = themeProvider.currentTokens;
+
+    return SettingsSectionCard(
+      title: 'Appearance',
+      subtitle: 'Selected Theme: ${tokens.name}',
+      icon: Icons.palette_outlined,
+      trailing: TextButton.icon(
+        onPressed: () =>
+            Navigator.of(context).pushNamed(AppRoutes.themeSelection),
+        icon: const Icon(Icons.tune_rounded),
+        label: const Text('Change Theme'),
+      ),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: tokens.cardGradient),
+            borderRadius: AppRadius.lgRadius,
+            border: Border.all(
+              color: tokens.textPrimary.withValues(alpha: 0.06),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: tokens.buttonGradient),
+                  borderRadius: AppRadius.mdRadius,
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tokens.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      tokens.description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _BusinessProfileCard extends StatelessWidget {
   const _BusinessProfileCard({required this.business});
 
@@ -421,10 +507,11 @@ class _BusinessProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.themeTokens;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        gradient: LinearGradient(colors: tokens.buttonGradient),
         borderRadius: AppRadius.xlRadius,
       ),
       child: LayoutBuilder(
@@ -551,9 +638,10 @@ class _PreferenceSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.themeTokens;
     return SwitchListTile.adaptive(
       contentPadding: EdgeInsets.zero,
-      secondary: Icon(icon, color: AppColors.primary),
+      secondary: Icon(icon, color: tokens.primary),
       title: Text(title),
       subtitle: Text(subtitle),
       value: value,

@@ -12,6 +12,9 @@ class BusinessModel {
     required this.email,
     required this.businessType,
     required this.gstin,
+    this.city = '',
+    this.state = '',
+    this.pinCode = '',
     this.alternatePhone,
     this.logoUrl,
     this.preferences = const <String, bool>{},
@@ -28,6 +31,9 @@ class BusinessModel {
   final String email;
   final String businessType;
   final String gstin;
+  final String city;
+  final String state;
+  final String pinCode;
   final String? logoUrl;
   final Map<String, bool> preferences;
   final DateTime? createdAt;
@@ -36,9 +42,15 @@ class BusinessModel {
   Map<String, Object?> toFirestore({bool includeServerTimestamps = false}) {
     return {
       FirestoreFields.businessId: businessId,
+      'ownerId': ownerUid,
       'ownerUid': ownerUid,
+      'businessName': name,
       'name': name,
       'address': address,
+      'city': city,
+      'state': state,
+      'pincode': pinCode,
+      'pinCode': pinCode,
       'phone': phone,
       'alternatePhone': alternatePhone,
       FirestoreFields.email: email,
@@ -61,9 +73,12 @@ class BusinessModel {
     final data = snapshot.data() ?? <String, dynamic>{};
     return BusinessModel(
       businessId: data[FirestoreFields.businessId] as String? ?? snapshot.id,
-      ownerUid: data['ownerUid'] as String? ?? '',
-      name: data['name'] as String? ?? '',
+      ownerUid: data['ownerId'] as String? ?? data['ownerUid'] as String? ?? '',
+      name: data['name'] as String? ?? data['businessName'] as String? ?? '',
       address: data['address'] as String? ?? '',
+      city: data['city'] as String? ?? '',
+      state: data['state'] as String? ?? '',
+      pinCode: data['pinCode'] as String? ?? data['pincode'] as String? ?? '',
       phone: data['phone'] as String? ?? '',
       alternatePhone: data['alternatePhone'] as String?,
       email: data[FirestoreFields.email] as String? ?? '',
@@ -87,6 +102,9 @@ class BusinessModel {
     String? email,
     String? businessType,
     String? gstin,
+    String? city,
+    String? state,
+    String? pinCode,
     String? logoUrl,
     bool clearLogo = false,
     Map<String, bool>? preferences,
@@ -105,6 +123,9 @@ class BusinessModel {
       email: email ?? this.email,
       businessType: businessType ?? this.businessType,
       gstin: gstin ?? this.gstin,
+      city: city ?? this.city,
+      state: state ?? this.state,
+      pinCode: pinCode ?? this.pinCode,
       logoUrl: clearLogo ? null : logoUrl ?? this.logoUrl,
       preferences: preferences ?? this.preferences,
       createdAt: createdAt ?? this.createdAt,

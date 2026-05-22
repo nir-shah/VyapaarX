@@ -30,7 +30,8 @@ class AuthSession {
   }) {
     final role = profile?['role'] as String?;
     final status = profile?['status'] as String?;
-    final businessId = profile?['businessId'] as String?;
+    final businessId =
+        profile?['businessId'] as String? ?? profile?['business_id'] as String?;
 
     return AuthSession(
       uid: user.uid,

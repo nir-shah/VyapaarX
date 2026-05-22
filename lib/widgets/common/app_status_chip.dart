@@ -19,7 +19,7 @@ class AppStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _colorFor(type);
+    final color = _colorFor(context, type);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -48,13 +48,14 @@ class AppStatusChip extends StatelessWidget {
     );
   }
 
-  Color _colorFor(AppStatusType type) {
+  Color _colorFor(BuildContext context, AppStatusType type) {
+    final colorScheme = Theme.of(context).colorScheme;
     return switch (type) {
-      AppStatusType.success => AppColors.success,
+      AppStatusType.success => colorScheme.tertiary,
       AppStatusType.warning => AppColors.warning,
-      AppStatusType.danger => AppColors.danger,
-      AppStatusType.info => AppColors.info,
-      AppStatusType.neutral => AppColors.textSecondary,
+      AppStatusType.danger => colorScheme.error,
+      AppStatusType.info => colorScheme.primary,
+      AppStatusType.neutral => colorScheme.onSurface.withValues(alpha: 0.68),
     };
   }
 }

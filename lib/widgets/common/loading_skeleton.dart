@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 
 class LoadingSkeleton extends StatefulWidget {
@@ -40,6 +39,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
 
   @override
   Widget build(BuildContext context) {
+    final baseColor = Theme.of(context).colorScheme.onSurface;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -53,9 +53,9 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
               end: Alignment.centerRight,
               stops: const [0.15, 0.5, 0.85],
               colors: [
-                AppColors.surfaceMuted.withValues(alpha: 0.55),
-                AppColors.surfaceMuted.withValues(alpha: 0.95),
-                AppColors.surfaceMuted.withValues(alpha: 0.55),
+                baseColor.withValues(alpha: 0.06),
+                baseColor.withValues(alpha: 0.12),
+                baseColor.withValues(alpha: 0.06),
               ],
               transform: _SlidingGradientTransform(_controller.value),
             ),

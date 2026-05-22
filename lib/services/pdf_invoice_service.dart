@@ -89,9 +89,9 @@ class _Header extends pw.StatelessWidget {
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
-        color: PdfColors.teal50,
+        color: PdfColors.blue50,
         borderRadius: pw.BorderRadius.circular(8),
-        border: pw.Border.all(color: PdfColors.teal200),
+        border: pw.Border.all(color: PdfColors.blue200),
       ),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -111,7 +111,7 @@ class _Header extends pw.StatelessWidget {
               height: 58,
               alignment: pw.Alignment.center,
               decoration: pw.BoxDecoration(
-                color: PdfColors.teal700,
+                color: PdfColors.blue700,
                 borderRadius: pw.BorderRadius.circular(6),
               ),
               child: pw.Text(
@@ -133,7 +133,7 @@ class _Header extends pw.StatelessWidget {
                   style: pw.TextStyle(
                     fontSize: 20,
                     fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.teal900,
+                    color: PdfColors.blue900,
                   ),
                 ),
                 pw.SizedBox(height: 4),
@@ -152,7 +152,7 @@ class _Header extends pw.StatelessWidget {
                 style: pw.TextStyle(
                   fontSize: 18,
                   fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.teal900,
+                  color: PdfColors.blue900,
                 ),
               ),
               pw.SizedBox(height: 6),
@@ -264,7 +264,7 @@ class _ItemsTable extends pw.StatelessWidget {
     }).toList();
 
     return pw.TableHelper.fromTextArray(
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.blue700),
       headerStyle: pw.TextStyle(
         color: PdfColors.white,
         fontWeight: pw.FontWeight.bold,

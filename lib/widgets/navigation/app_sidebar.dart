@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme_tokens.dart';
 import 'app_navigation_item.dart';
 
 class AppSidebar extends StatelessWidget {
@@ -25,16 +25,25 @@ class AppSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.themeTokens;
+    final borderColor = tokens.textPrimary.withValues(alpha: 0.06);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       width: widthFor(collapsed),
-      color: AppColors.surface,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.xl,
         AppSpacing.lg,
         AppSpacing.lg,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: tokens.sidebarGradient,
+        ),
+        border: Border(right: BorderSide(color: borderColor)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -42,6 +51,7 @@ class AppSidebar extends StatelessWidget {
           _SidebarBrand(
             collapsed: collapsed,
             onToggleCollapsed: onToggleCollapsed,
+            tokens: tokens,
           ),
           const SizedBox(height: AppSpacing.xxl),
           Expanded(
@@ -66,9 +76,14 @@ class AppSidebar extends StatelessWidget {
 }
 
 class _SidebarBrand extends StatelessWidget {
-  const _SidebarBrand({required this.collapsed, this.onToggleCollapsed});
+  const _SidebarBrand({
+    required this.collapsed,
+    required this.tokens,
+    this.onToggleCollapsed,
+  });
 
   final bool collapsed;
+  final AppThemeTokens tokens;
   final VoidCallback? onToggleCollapsed;
 
   @override
@@ -79,8 +94,19 @@ class _SidebarBrand extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.primary,
+            gradient: LinearGradient(
+              colors: tokens.buttonGradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: tokens.primary.withValues(alpha: 0.12),
+                blurRadius: 28,
+                offset: const Offset(0, 16),
+              ),
+            ],
           ),
           child: const Icon(Icons.storefront_rounded, color: Colors.white),
         ),
@@ -95,10 +121,10 @@ class _SidebarBrand extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Text(
-                  'Business ERP',
+                  'Business OS',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontSize: 12,
-                    color: AppColors.textMuted,
+                    color: _onSidebarColor(tokens).withValues(alpha: 0.66),
                   ),
                 ),
               ],
@@ -118,6 +144,12 @@ class _SidebarBrand extends StatelessWidget {
       ],
     );
   }
+}
+
+Color _onSidebarColor(AppThemeTokens tokens) {
+  return tokens.sidebarGradient.first.computeLuminance() < 0.45
+      ? Colors.white
+      : tokens.textPrimary;
 }
 
 class _SidebarTile extends StatefulWidget {
@@ -142,12 +174,17 @@ class _SidebarTileState extends State<_SidebarTile> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final tokens = context.themeTokens;
+    final onSidebar = _onSidebarColor(tokens);
     final selected = widget.selected;
-    final color = selected ? AppColors.primary : AppColors.textSecondary;
+    final color = selected
+        ? colorScheme.primary
+        : onSidebar.withValues(alpha: 0.66);
     final background = selected
-        ? AppColors.primaryLight
+        ? colorScheme.primary.withValues(alpha: 0.10)
         : _hovered
-        ? AppColors.surfaceSoft
+        ? onSidebar.withValues(alpha: 0.08)
         : Colors.transparent;
 
     final tile = MouseRegion(
@@ -175,7 +212,7 @@ class _SidebarTileState extends State<_SidebarTile> {
                   width: 4,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : Colors.transparent,
+                    color: selected ? colorScheme.primary : Colors.transparent,
                     borderRadius: AppRadius.pillRadius,
                   ),
                 ),
@@ -192,8 +229,8 @@ class _SidebarTileState extends State<_SidebarTile> {
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: color,
                         fontWeight: selected
-                            ? FontWeight.w900
-                            : FontWeight.w700,
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                       ),
                     ),
                   ),

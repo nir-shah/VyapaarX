@@ -32,7 +32,7 @@ class AuthService {
         .doc(user.uid)
         .get();
     final profile = profileSnapshot.data();
-    final businessId = profile?[FirestoreFields.businessId] as String?;
+    final businessId = _readBusinessId(profile);
     final hasBusinessProfile = await _hasValidBusinessProfile(businessId);
 
     return AuthSession.fromFirebaseUser(
@@ -103,6 +103,20 @@ class AuthService {
   }
 
   Future<void> signOut() => _auth.signOut();
+
+  String? _readBusinessId(Map<String, dynamic>? profile) {
+    final businessId = profile?[FirestoreFields.businessId] as String?;
+    if (businessId != null && businessId.trim().isNotEmpty) {
+      return businessId.trim();
+    }
+
+    final legacyBusinessId = profile?['business_id'] as String?;
+    if (legacyBusinessId != null && legacyBusinessId.trim().isNotEmpty) {
+      return legacyBusinessId.trim();
+    }
+
+    return null;
+  }
 
   Future<bool> _hasValidBusinessProfile(String? businessId) async {
     if (businessId == null || businessId.isEmpty) return false;

@@ -49,7 +49,27 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> refreshSession() => initializeSession();
+  Future<AuthSession?> refreshSession({bool showLoading = false}) async {
+    if (showLoading) {
+      _isLoading = true;
+    }
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final session = await _authService.loadCurrentSession();
+      _applySession(session);
+      return session;
+    } on Object catch (error) {
+      _setError(_friendlyError(error), notify: false);
+      rethrow;
+    } finally {
+      if (showLoading) {
+        _isLoading = false;
+      }
+      notifyListeners();
+    }
+  }
 
   Future<void> signInWithEmail({
     required String email,

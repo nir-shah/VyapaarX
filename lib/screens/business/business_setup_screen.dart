@@ -131,24 +131,72 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
 
     try {
       final businessId = _businessService.createBusinessId();
+      final gstin = _gstinController.text.trim().toUpperCase();
+      debugPrint('Business setup save started.');
+      debugPrint('Current user id: ${session.uid}');
+      debugPrint('Generated businessId: $businessId');
+      debugPrint(
+        'Business form values: name=${_nameController.text.trim()}, '
+        'phone=${_normalizeIndianPhone(_phoneController.text)}, '
+        'email=${_emailController.text.trim()}, type=$_businessType, '
+        'gstin=${gstin.isEmpty ? '(empty)' : gstin}, '
+        'address=${_addressController.text.trim()}, '
+        'city=${_cityController.text.trim()}, '
+        'state=${_stateController.text.trim()}, '
+        'pincode=${_pinCodeController.text.trim()}',
+      );
+      debugPrint(
+        _logoBytes == null
+            ? 'Business logo upload skipped: no logo selected.'
+            : 'Business logo will upload after Firestore profile link. file=$_logoName bytes=${_logoBytes!.length}',
+      );
       final business = BusinessModel(
         businessId: businessId,
         ownerUid: session.uid,
         name: _nameController.text.trim(),
-        address: _fullAddress,
+        address: _addressController.text.trim(),
+        city: _cityController.text.trim(),
+        state: _stateController.text.trim(),
+        pinCode: _pinCodeController.text.trim(),
         phone: _normalizeIndianPhone(_phoneController.text),
         email: _emailController.text.trim(),
         businessType: _businessType,
-        gstin: _gstinController.text.trim().toUpperCase(),
+        gstin: gstin,
       );
 
-      await _businessService.createBusiness(
+      debugPrint('Firestore business path: businesses/$businessId');
+      debugPrint('Firestore user path: users/${session.uid}');
+      final createdBusinessId = await _businessService.createBusiness(
         business: business,
         logoBytes: _logoBytes,
         logoFileName: _logoName,
         logoContentType: _logoContentType,
       );
-      await auth.refreshSession();
+      debugPrint('Created businessId: $createdBusinessId');
+
+      final reloadedSession = await auth.refreshSession();
+      final reloadedBusinessId = reloadedSession?.businessId;
+      debugPrint('Reloaded user businessId: $reloadedBusinessId');
+
+      if (reloadedBusinessId == null ||
+          reloadedBusinessId.isEmpty ||
+          reloadedBusinessId != createdBusinessId ||
+          reloadedSession?.hasBusinessProfile != true) {
+        debugPrint(
+          'Business setup link verification failed. '
+          'createdBusinessId=$createdBusinessId, '
+          'reloadedBusinessId=$reloadedBusinessId, '
+          'hasBusinessProfile=${reloadedSession?.hasBusinessProfile}',
+        );
+        if (!mounted) return;
+        SnackBarHelper.show(
+          context,
+          message:
+              'Business saved, but user profile was not linked. Please try again.',
+          type: AppSnackBarType.error,
+        );
+        return;
+      }
 
       if (!mounted) return;
       setState(() => _setupComplete = true);
@@ -162,7 +210,9 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       Navigator.of(
         context,
       ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (_) => false);
-    } on Object catch (_) {
+    } on Object catch (error, stackTrace) {
+      debugPrint('Business save failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       SnackBarHelper.show(
         context,
@@ -514,7 +564,7 @@ class _TaxStep extends StatelessWidget {
               );
             }),
           ],
-          validator: Validators.gstin,
+          validator: Validators.optionalGstin,
         ),
       ],
     );

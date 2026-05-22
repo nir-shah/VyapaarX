@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../widgets/widgets.dart';
@@ -23,6 +22,7 @@ class SettingsSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return ModernCard(
       showShadow: true,
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -36,10 +36,10 @@ class SettingsSectionCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: colorScheme.primary.withValues(alpha: 0.10),
                   borderRadius: AppRadius.mdRadius,
                 ),
-                child: Icon(icon, color: AppColors.primary),
+                child: Icon(icon, color: colorScheme.primary),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -52,7 +52,7 @@ class SettingsSectionCard extends StatelessWidget {
                       Text(
                         subtitle!,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
+                          color: colorScheme.onSurface.withValues(alpha: 0.66),
                         ),
                       ),
                     ],

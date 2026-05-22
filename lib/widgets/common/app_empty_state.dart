@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import 'app_primary_button.dart';
@@ -27,6 +26,7 @@ class AppEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -42,10 +42,10 @@ class AppEmptyState extends StatelessWidget {
                   width: 76,
                   height: 76,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
+                    color: colorScheme.primary.withValues(alpha: 0.10),
                     borderRadius: AppRadius.xlRadius,
                   ),
-                  child: Icon(icon, size: 34, color: AppColors.primary),
+                  child: Icon(icon, size: 34, color: colorScheme.primary),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(

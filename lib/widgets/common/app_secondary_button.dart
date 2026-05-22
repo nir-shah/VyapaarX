@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_button.dart';
+
 class AppSecondaryButton extends StatelessWidget {
   const AppSecondaryButton({
     super.key,
@@ -18,23 +20,13 @@ class AppSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: fullWidth ? double.infinity : null,
+    return AppButton(
+      label: label,
+      onPressed: onPressed,
+      icon: icon,
+      fullWidth: fullWidth,
       height: height,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 20),
-              const SizedBox(width: 8),
-            ],
-            Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-          ],
-        ),
-      ),
+      variant: AppButtonVariant.secondary,
     );
   }
 }

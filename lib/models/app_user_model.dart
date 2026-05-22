@@ -63,7 +63,10 @@ class AppUserModel {
     final data = doc.data() ?? <String, dynamic>{};
     return AppUserModel(
       uid: doc.id,
-      businessId: data[FirestoreFields.businessId] as String? ?? '',
+      businessId:
+          data[FirestoreFields.businessId] as String? ??
+          data['business_id'] as String? ??
+          '',
       displayName: data[FirestoreFields.displayName] as String? ?? '',
       email: data[FirestoreFields.email] as String? ?? '',
       phoneNumber: data[FirestoreFields.phoneNumber] as String? ?? '',
